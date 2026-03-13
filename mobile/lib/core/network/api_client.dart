@@ -26,7 +26,7 @@ class ApiClient {
 
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:7078',
+    defaultValue: 'https://optimahealthapp-production.up.railway.app',
   );
 
   Future<LoginResponseModel> login({
