@@ -1,0 +1,28 @@
+name: optima_healthcare_mobile
+description: Mobile app for OptimaHealthcare EHR
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.10.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_image_compress: ^2.4.0
+  http: ^1.2.2
+  image_picker: ^1.1.2
+  table_calendar: ^3.1.2
+  web_socket_channel: ^3.0.2
+  record: ^6.2.0
+  permission_handler: ^11.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/

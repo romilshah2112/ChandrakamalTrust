@@ -1,0 +1,22 @@
+# Build outputs
+**/bin/
+**/obj/
+**/.dart_tool/
+**/.build/
+**/build/
+backend/temp_build/
+
+# Environment files
+.env
+.env.*
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+whisper-env/
+venv/
+env/
+__pycache__/
+*.pyc
