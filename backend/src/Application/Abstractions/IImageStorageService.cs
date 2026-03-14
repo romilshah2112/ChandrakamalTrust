@@ -7,4 +7,8 @@ public interface IImageStorageService
         string fileName,
         string contentType,
         CancellationToken cancellationToken);
+
+    string? ResolveImageUrl(string? storedValue);
+
+    string? NormalizeStoredValue(string? value);
 }

@@ -38,11 +38,15 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
-    final username = AuthSession.username ?? '';
     final role = AuthSession.role ?? '';
-    final displayName = username.contains('@')
-        ? username.split('@').first
-        : username;
+    final firstName = AuthSession.firstName?.trim() ?? '';
+    final lastName = AuthSession.lastName?.trim() ?? '';
+    final fullName = [firstName, lastName]
+        .where((part) => part.isNotEmpty)
+        .join(' ');
+    final displayName = fullName.isNotEmpty
+        ? fullName
+        : (AuthSession.username ?? '');
     final roleLabel = _roleDisplayName(role);
 
     return Scaffold(
@@ -204,7 +208,7 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
         index: _selectedNavIndex,
         children: [
           DashboardHomeContent(
-            displayName: displayName,
+            displayName: firstName.isNotEmpty ? firstName : displayName,
             welcomeSubtitle:
                 'Use quick actions or the menu to manage patients and appointments.',
             quickActions: [

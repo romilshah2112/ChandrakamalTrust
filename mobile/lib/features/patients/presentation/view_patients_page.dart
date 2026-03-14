@@ -67,6 +67,32 @@ class _ViewPatientsPageState extends State<ViewPatientsPage> {
     }
   }
 
+  String? _normalizeRemoteImageUrl(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || uri.host.isEmpty) {
+      return null;
+    }
+
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
+      return null;
+    }
+
+    return trimmed;
+  }
+
+  Widget _buildPatientThumbnail(PatientListItemModel patient) {
+    final imageUrl = _normalizeRemoteImageUrl(patient.imageName);
+    return CircleAvatar(
+      backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
+      child: imageUrl == null ? const Icon(Icons.person) : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -108,6 +134,7 @@ class _ViewPatientsPageState extends State<ViewPatientsPage> {
                               final p = _patients[index];
                               return Card(
                                 child: ListTile(
+                                  leading: _buildPatientThumbnail(p),
                                   title: Text('${p.firstName} ${p.lastName}'),
                                   subtitle: Text('${p.mobileNo} | ${p.email}'),
                                   trailing: Text(p.isActive ? 'Active' : 'Inactive'),

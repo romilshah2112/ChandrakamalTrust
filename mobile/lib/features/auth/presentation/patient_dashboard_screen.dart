@@ -22,8 +22,14 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
-    final username = AuthSession.username ?? '';
-    final displayName = username.contains('@') ? username.split('@').first : username;
+    final firstName = AuthSession.firstName?.trim() ?? '';
+    final lastName = AuthSession.lastName?.trim() ?? '';
+    final fullName = [firstName, lastName]
+        .where((part) => part.isNotEmpty)
+        .join(' ');
+    final displayName = fullName.isNotEmpty
+        ? fullName
+        : (AuthSession.username ?? '');
 
     return Scaffold(
       appBar: AppBar(
@@ -126,7 +132,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
         index: _selectedNavIndex,
         children: [
           DashboardHomeContent(
-            displayName: displayName,
+            displayName: firstName.isNotEmpty ? firstName : displayName,
             welcomeSubtitle: 'Your heart health is looking great. Keep up the good work!',
             quickActions: [
               QuickActionItem(

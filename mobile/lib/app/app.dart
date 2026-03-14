@@ -10,7 +10,7 @@ class OptimaHealthcareApp extends StatelessWidget {
     return MaterialApp(
       title: 'Padam Heart Care Centre',
       theme: AppTheme.light,
-      initialRoute: AppRouter.login,
+      initialRoute: AppRouter.splash,
       routes: AppRouter.routes,
       debugShowCheckedModeBanner: false,
     );

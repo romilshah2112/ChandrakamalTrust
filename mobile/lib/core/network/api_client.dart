@@ -163,6 +163,13 @@ class ApiClient {
       throw const AuthException('You are not allowed to add patients.');
     }
 
+    if (response.statusCode == 400) {
+      final body = response.body.trim();
+      throw AuthException(
+        body.isEmpty ? 'Invalid patient details.' : body,
+      );
+    }
+
     throw AuthException('Create patient failed: HTTP ${response.statusCode}');
   }
 
@@ -302,7 +309,10 @@ class ApiClient {
     }
 
     if (response.statusCode == 400) {
-      throw const AuthException('Invalid patient details.');
+      final body = response.body.trim();
+      throw AuthException(
+        body.isEmpty ? 'Invalid patient details.' : body,
+      );
     }
 
     throw AuthException('Update patient failed: HTTP ${response.statusCode}');
@@ -369,6 +379,13 @@ class ApiClient {
 
     if (response.statusCode == 204) {
       return;
+    }
+
+    if (response.statusCode == 400) {
+      final body = response.body.trim();
+      throw AuthException(
+        body.isEmpty ? 'Invalid profile payload.' : body,
+      );
     }
 
     throw AuthException('Update profile failed: HTTP ${response.statusCode}');

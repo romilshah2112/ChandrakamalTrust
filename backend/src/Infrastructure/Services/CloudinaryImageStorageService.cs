@@ -1,6 +1,5 @@
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
+using CloudinaryDotNet;
+using CloudinaryDotNet.Actions;
 using Microsoft.Extensions.Configuration;
 using OptimaHealthcare.Application.Abstractions;
 
@@ -9,19 +8,26 @@ namespace OptimaHealthcare.Infrastructure.Services;
 public sealed class CloudinaryImageStorageService : IImageStorageService
 {
     private const int MaxBytes = 50 * 1024;
-    private readonly HttpClient _httpClient;
+    private const string AssetFolder = "OptimaHealthcare";
+    private readonly Cloudinary _cloudinary;
     private readonly string _cloudName;
-    private readonly string _apiKey;
-    private readonly string _apiSecret;
 
-    public CloudinaryImageStorageService(HttpClient httpClient, IConfiguration configuration)
+    public CloudinaryImageStorageService(IConfiguration configuration)
     {
-        _httpClient = httpClient;
-
         var section = configuration.GetSection("Cloudinary");
-        _cloudName = section["CLOUDINARY_CLOUD_NAME"] ?? string.Empty;
-        _apiKey = section["CLOUDINARY_API_KEY"] ?? string.Empty;
-        _apiSecret = section["CLOUDINARY_API_SECRET"] ?? string.Empty;
+        var cloudName = section["CLOUDINARY_CLOUD_NAME"] ?? string.Empty;
+        var apiKey = section["CLOUDINARY_API_KEY"] ?? string.Empty;
+        var apiSecret = section["CLOUDINARY_API_SECRET"] ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(cloudName) ||
+            string.IsNullOrWhiteSpace(apiKey) ||
+            string.IsNullOrWhiteSpace(apiSecret))
+        {
+            throw new InvalidOperationException("Cloudinary configuration is missing.");
+        }
+
+        _cloudName = cloudName;
+        _cloudinary = new Cloudinary(new Account(cloudName, apiKey, apiSecret));
     }
 
     public async Task<string> UploadPatientProfileAsync(
@@ -40,63 +46,104 @@ public sealed class CloudinaryImageStorageService : IImageStorageService
             throw new InvalidOperationException("Patient image must be less than 50KB.");
         }
 
-        if (string.IsNullOrWhiteSpace(_cloudName) ||
-            string.IsNullOrWhiteSpace(_apiKey) ||
-            string.IsNullOrWhiteSpace(_apiSecret))
+        var publicIdPrefix = ResolvePublicIdPrefix(fileName);
+        var publicId = $"{publicIdPrefix}-{Guid.NewGuid():N}";
+
+        await using var stream = new MemoryStream(bytes, writable: false);
+        var uploadParams = new ImageUploadParams
         {
-            throw new InvalidOperationException("Cloudinary configuration is missing.");
+            File = new FileDescription(
+                string.IsNullOrWhiteSpace(fileName) ? "patient-profile.jpg" : fileName,
+                stream),
+            AssetFolder = AssetFolder,
+            Folder = AssetFolder,
+            PublicId = publicId,
+            UseAssetFolderAsPublicIdPrefix = true
+        };
+
+        var result = await _cloudinary.UploadAsync(uploadParams);
+        if (result.Error is not null)
+        {
+            throw new InvalidOperationException(
+                $"Cloudinary upload failed: {result.Error.Message}");
         }
 
-        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var publicId = $"patient-{Guid.NewGuid():N}";
-        var folder = "OptimaHealthcare";
-        var signaturePayload = $"folder={folder}&public_id={publicId}&timestamp={timestamp}{_apiSecret}";
-        var signature = ComputeSha1(signaturePayload);
-
-        using var form = new MultipartFormDataContent();
-        using var fileContent = new ByteArrayContent(bytes);
-        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
-
-        form.Add(fileContent, "file", string.IsNullOrWhiteSpace(fileName) ? "patient-profile.jpg" : fileName);
-        form.Add(new StringContent(_apiKey), "api_key");
-        form.Add(new StringContent(timestamp.ToString()), "timestamp");
-        form.Add(new StringContent(publicId), "public_id");
-        form.Add(new StringContent(folder), "folder");
-        form.Add(new StringContent(signature), "signature");
-
-        var url = $"https://api.cloudinary.com/v1_1/{_cloudName}/image/upload";
-        using var response = await _httpClient.PostAsync(url, form, cancellationToken);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
+        var format = result.Format;
+        if (string.IsNullOrWhiteSpace(format))
         {
-            throw new InvalidOperationException($"Cloudinary upload failed: HTTP {(int)response.StatusCode}.");
+            throw new InvalidOperationException("Cloudinary returned an empty image format.");
         }
 
-        using var document = JsonDocument.Parse(body);
-        if (!document.RootElement.TryGetProperty("secure_url", out var secureUrlElement))
-        {
-            throw new InvalidOperationException("Cloudinary response did not include secure_url.");
-        }
-
-        var secureUrl = secureUrlElement.GetString();
-        if (string.IsNullOrWhiteSpace(secureUrl))
-        {
-            throw new InvalidOperationException("Cloudinary returned an empty image URL.");
-        }
-
-        return secureUrl;
+        return $"{publicId}.{format}";
     }
 
-    private static string ComputeSha1(string value)
+    public string? ResolveImageUrl(string? storedValue)
     {
-        var bytes = Encoding.UTF8.GetBytes(value);
-        var hash = SHA1.HashData(bytes);
-        var sb = new StringBuilder(hash.Length * 2);
-        foreach (var b in hash)
+        var normalized = NormalizeStoredValue(storedValue);
+        if (string.IsNullOrWhiteSpace(normalized))
         {
-            sb.Append(b.ToString("x2"));
+            return null;
         }
-        return sb.ToString();
+
+        var extension = Path.GetExtension(normalized);
+        var format = string.IsNullOrWhiteSpace(extension)
+            ? null
+            : extension.TrimStart('.').ToLowerInvariant();
+        var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(normalized);
+        if (string.IsNullOrWhiteSpace(fileNameWithoutExtension))
+        {
+            return null;
+        }
+
+        var publicId = BuildPublicId(fileNameWithoutExtension);
+        var url = _cloudinary.Api.UrlImgUp.Secure(true);
+        if (!string.IsNullOrWhiteSpace(format))
+        {
+            url = url.Format(format);
+        }
+
+        return url.BuildUrl(publicId);
+    }
+
+    public string? NormalizeStoredValue(string? value)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return null;
+        }
+
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+        {
+            var fileName = Path.GetFileName(uri.AbsolutePath);
+            return string.IsNullOrWhiteSpace(fileName) ? null : fileName;
+        }
+
+        if (trimmed.Contains('/'))
+        {
+            var fileName = trimmed.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+            return string.IsNullOrWhiteSpace(fileName) ? null : fileName;
+        }
+
+        return trimmed;
+    }
+
+    private static string BuildPublicId(string fileNameWithoutExtension)
+    {
+        // New uploads use the OptimaHealthcare folder and generated patient-* ids.
+        // Older database rows contain legacy names that live at the Cloudinary root.
+        return fileNameWithoutExtension.StartsWith("patient-", StringComparison.OrdinalIgnoreCase)
+            || fileNameWithoutExtension.StartsWith("profile-", StringComparison.OrdinalIgnoreCase)
+            ? $"{AssetFolder}/{fileNameWithoutExtension}"
+            : fileNameWithoutExtension;
+    }
+
+    private static string ResolvePublicIdPrefix(string fileName)
+    {
+        var normalized = fileName.Trim();
+        return normalized.StartsWith("user-profile", StringComparison.OrdinalIgnoreCase)
+            || normalized.StartsWith("profile", StringComparison.OrdinalIgnoreCase)
+            ? "profile"
+            : "patient";
     }
 }

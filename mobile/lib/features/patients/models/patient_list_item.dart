@@ -5,6 +5,7 @@ class PatientListItemModel {
     required this.lastName,
     required this.mobileNo,
     required this.email,
+    required this.imageName,
     required this.isActive,
   });
 
@@ -13,6 +14,7 @@ class PatientListItemModel {
   final String lastName;
   final int mobileNo;
   final String email;
+  final String imageName;
   final bool isActive;
 
   factory PatientListItemModel.fromJson(Map<String, dynamic> json) {
@@ -22,6 +24,7 @@ class PatientListItemModel {
       lastName: json['lastName'] as String? ?? '',
       mobileNo: json['mobileNo'] as int? ?? 0,
       email: json['email'] as String? ?? '',
+      imageName: json['imageName'] as String? ?? '',
       isActive: json['isActive'] as bool? ?? false,
     );
   }

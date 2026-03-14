@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:optima_healthcare_mobile/app/router.dart';
 import 'package:optima_healthcare_mobile/core/network/api_client.dart';
 import 'package:optima_healthcare_mobile/features/auth/data/auth_repository.dart';
+import 'package:optima_healthcare_mobile/features/auth/data/user_profile_repository.dart';
 import 'package:optima_healthcare_mobile/features/auth/models/auth_session.dart';
 import 'package:optima_healthcare_mobile/features/auth/models/signup_request.dart';
 import 'package:optima_healthcare_mobile/features/auth/models/user_role_option.dart';
@@ -28,6 +29,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _signUpPasswordController = TextEditingController();
 
   final _authRepository = AuthRepository();
+  final _userProfileRepository = UserProfileRepository();
 
   bool _isLoading = false;
   bool _isSignUpMode = false;
@@ -67,11 +69,25 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text,
       );
 
+      String? firstName;
+      String? lastName;
+      try {
+        final profile = await _userProfileRepository.getMyProfile(
+          accessToken: loginResult.accessToken,
+        );
+        firstName = profile.firstName;
+        lastName = profile.lastName;
+      } catch (_) {
+        // Keep login resilient even if profile loading fails.
+      }
+
       AuthSession.set(
         appUserIdValue: loginResult.appUserId,
         usernameValue: loginResult.username,
         roleValue: loginResult.role,
         accessTokenValue: loginResult.accessToken,
+        firstNameValue: firstName,
+        lastNameValue: lastName,
       );
 
       if (!mounted) {
@@ -194,6 +210,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

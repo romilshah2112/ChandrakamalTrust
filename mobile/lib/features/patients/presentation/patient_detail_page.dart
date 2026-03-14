@@ -136,6 +136,39 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
     if (updated == true && mounted) _load();
   }
 
+  String? _normalizeRemoteImageUrl(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || uri.host.isEmpty) {
+      return null;
+    }
+
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
+      return null;
+    }
+
+    return trimmed;
+  }
+
+  Widget _buildProfileAvatar(PatientDetailModel patient) {
+    final imageUrl = _normalizeRemoteImageUrl(patient.imageName);
+    return Center(
+      child: imageUrl != null
+          ? CircleAvatar(
+              radius: 52,
+              backgroundImage: NetworkImage(imageUrl),
+            )
+          : const CircleAvatar(
+              radius: 52,
+              child: Icon(Icons.person, size: 42),
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -180,6 +213,8 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
                   : ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
+                        _buildProfileAvatar(_patient!),
+                        const SizedBox(height: 16),
                         _item('Name', '${_patient!.firstName} ${_patient!.lastName}'),
                         _item('Mobile', '${_patient!.mobileNo}'),
                         _item('Email', _patient!.email),

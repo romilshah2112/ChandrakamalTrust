@@ -69,14 +69,32 @@ public sealed class UserProfileController : ControllerBase
         }
 
         var appUserId = GetAppUserIdFromClaims();
-        if (appUserId <= 0)
+        var login = User.FindFirstValue(ClaimTypes.Name);
+
+        if (appUserId <= 0 && string.IsNullOrWhiteSpace(login))
         {
             return Forbid();
         }
 
         try
         {
-            await _userProfileService.UpdateAsync(appUserId, request, cancellationToken);
+            UserProfileResponse? profile = null;
+            if (appUserId > 0)
+            {
+                profile = await _userProfileService.GetByAppUserIdAsync(appUserId, cancellationToken);
+            }
+
+            if (profile is null && !string.IsNullOrWhiteSpace(login))
+            {
+                profile = await _userProfileService.GetByLoginAsync(login, cancellationToken);
+            }
+
+            if (profile is null)
+            {
+                return NotFound("User profile not found.");
+            }
+
+            await _userProfileService.UpdateAsync(profile.AppUserId, request, cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)

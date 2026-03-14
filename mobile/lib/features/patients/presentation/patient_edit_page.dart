@@ -65,7 +65,7 @@ class _PatientEditPageState extends State<PatientEditPage> {
     _referenceTypeId = TextEditingController(text: '${p.referenceTypeId}');
     _referenceName = TextEditingController(text: p.referenceName);
     _isActive = p.isActive;
-    _currentImageUrl = p.imageName.isEmpty ? null : p.imageName;
+    _currentImageUrl = _normalizeRemoteImageUrl(p.imageName);
   }
 
   @override
@@ -175,6 +175,28 @@ class _PatientEditPageState extends State<PatientEditPage> {
       _profileImageContentType = null;
       _currentImageUrl = null;
     });
+  }
+
+  String? _normalizeRemoteImageUrl(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null) {
+      return null;
+    }
+
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
+      return null;
+    }
+
+    if (uri.host.isEmpty) {
+      return null;
+    }
+
+    return trimmed;
   }
 
   Future<void> _save() async {
@@ -386,7 +408,7 @@ class _PatientEditPageState extends State<PatientEditPage> {
                     radius: 52,
                     backgroundImage: MemoryImage(_profileImageBytes!),
                   )
-                : (_currentImageUrl?.isNotEmpty ?? false)
+                : (_currentImageUrl != null)
                 ? CircleAvatar(
                     radius: 52,
                     backgroundImage: NetworkImage(_currentImageUrl!),
@@ -418,8 +440,7 @@ class _PatientEditPageState extends State<PatientEditPage> {
                 icon: const Icon(Icons.photo_camera_outlined),
                 label: const Text('Capture / Upload'),
               ),
-              if (_profileImageBytes != null ||
-                  (_currentImageUrl?.isNotEmpty ?? false))
+              if (_profileImageBytes != null || _currentImageUrl != null)
                 OutlinedButton(
                   onPressed: _saving ? null : _removeSelectedImage,
                   child: const Text('Remove'),

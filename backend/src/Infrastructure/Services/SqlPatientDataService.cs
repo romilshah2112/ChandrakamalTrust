@@ -94,7 +94,7 @@ ORDER BY [CreatedDate] DESC, [lPatientDataId] DESC";
             City = reader["City"]?.ToString() ?? string.Empty,
             BirthDate = DateOnly.FromDateTime(Convert.ToDateTime(reader["BirthDate"])),
             CreatedDate = DateOnly.FromDateTime(Convert.ToDateTime(reader["CreatedDate"])),
-            ImageName = reader["ImageName"]?.ToString() ?? string.Empty,
+            ImageName = _imageStorageService.ResolveImageUrl(reader["ImageName"]?.ToString()) ?? string.Empty,
             AppUserId = Convert.ToInt32(reader["lAppUserId"]),
             ReferenceTypeId = Convert.ToInt32(reader["lReferenceTypeId"]),
             ReferenceName = reader["ReferenceName"]?.ToString() ?? string.Empty,
@@ -107,9 +107,9 @@ ORDER BY [CreatedDate] DESC, [lPatientDataId] DESC";
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
-        const string sql = @"
+const string sql = @"
 SELECT
-    [lPatientDataId], [FirstName], [LastName], [MobileNo], [Email], [IsActive]
+    [lPatientDataId], [FirstName], [LastName], [MobileNo], [Email], [ImageName], [IsActive]
 FROM [patientdata]
 WHERE (@query IS NULL OR @query = ''
     OR [FirstName] LIKE '%' + @query + '%'
@@ -132,6 +132,7 @@ ORDER BY [CreatedDate] DESC, [lPatientDataId] DESC";
                 LastName = reader["LastName"]?.ToString() ?? string.Empty,
                 MobileNo = Convert.ToInt64(reader["MobileNo"]),
                 Email = reader["Email"]?.ToString() ?? string.Empty,
+                ImageName = _imageStorageService.ResolveImageUrl(reader["ImageName"]?.ToString()) ?? string.Empty,
                 IsActive = Convert.ToBoolean(reader["IsActive"])
             });
         }
@@ -172,7 +173,7 @@ WHERE [lPatientDataId] = @patientDataId";
             City = reader["City"]?.ToString() ?? string.Empty,
             BirthDate = DateOnly.FromDateTime(Convert.ToDateTime(reader["BirthDate"])),
             CreatedDate = DateOnly.FromDateTime(Convert.ToDateTime(reader["CreatedDate"])),
-            ImageName = reader["ImageName"]?.ToString() ?? string.Empty,
+            ImageName = _imageStorageService.ResolveImageUrl(reader["ImageName"]?.ToString()) ?? string.Empty,
             AppUserId = Convert.ToInt32(reader["lAppUserId"]),
             ReferenceTypeId = Convert.ToInt32(reader["lReferenceTypeId"]),
             ReferenceName = reader["ReferenceName"]?.ToString() ?? string.Empty,
@@ -302,7 +303,7 @@ WHERE [lPatientDataId] = @patientDataId";
     {
         if (string.IsNullOrWhiteSpace(imageBase64))
         {
-            return currentImageName;
+            return _imageStorageService.NormalizeStoredValue(currentImageName);
         }
 
         try

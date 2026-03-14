@@ -36,6 +36,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _profileImageFileName;
   String? _profileImageContentType;
   String? _currentProfileImage;
+  String? _imageLoadError;
 
   @override
   void initState() {
@@ -69,9 +70,12 @@ class _ProfilePageState extends State<ProfilePage> {
       _lastName.text = profile.lastName;
       _mobile.text = '${profile.mobileNumber}';
       _email.text = profile.emailAddress;
-      _currentProfileImage = profile.profileImage.isEmpty
-          ? null
-          : profile.profileImage;
+      _currentProfileImage = _normalizeRemoteImageUrl(profile.profileImage);
+      _imageLoadError = null;
+      AuthSession.updateProfileName(
+        firstNameValue: profile.firstName,
+        lastNameValue: profile.lastName,
+      );
       setState(() {
         _loading = false;
       });
@@ -113,6 +117,7 @@ class _ProfilePageState extends State<ProfilePage> {
         _profileImageBytes = compressed;
         _profileImageFileName = baseName;
         _profileImageContentType = 'image/jpeg';
+        _imageLoadError = null;
         _error = null;
       });
     } catch (ex) {
@@ -174,7 +179,30 @@ class _ProfilePageState extends State<ProfilePage> {
       _profileImageFileName = null;
       _profileImageContentType = null;
       _currentProfileImage = null;
+      _imageLoadError = null;
     });
+  }
+
+  String? _normalizeRemoteImageUrl(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null) {
+      return null;
+    }
+
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
+      return null;
+    }
+
+    if (uri.host.isEmpty) {
+      return null;
+    }
+
+    return trimmed;
   }
 
   Future<void> _save() async {
@@ -310,10 +338,29 @@ class _ProfilePageState extends State<ProfilePage> {
                     radius: 56,
                     backgroundImage: MemoryImage(_profileImageBytes!),
                   )
-                : (_currentProfileImage?.isNotEmpty ?? false)
+                : (_currentProfileImage != null)
                 ? CircleAvatar(
                     radius: 56,
-                    backgroundImage: NetworkImage(_currentProfileImage!),
+                    child: ClipOval(
+                      child: Image.network(
+                        _currentProfileImage!,
+                        width: 112,
+                        height: 112,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (!mounted) {
+                              return;
+                            }
+                            setState(() {
+                              _imageLoadError =
+                                  'Profile image could not be loaded from the saved URL.';
+                            });
+                          });
+                          return const Icon(Icons.person, size: 44);
+                        },
+                      ),
+                    ),
                   )
                 : const CircleAvatar(
                     radius: 56,
@@ -332,6 +379,14 @@ class _ProfilePageState extends State<ProfilePage> {
             style: Theme.of(context).textTheme.bodySmall,
             textAlign: TextAlign.center,
           ),
+          if (_imageLoadError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _imageLoadError!,
+              style: const TextStyle(color: Colors.red),
+              textAlign: TextAlign.center,
+            ),
+          ],
           const SizedBox(height: 10),
           Wrap(
             alignment: WrapAlignment.center,
@@ -343,8 +398,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 icon: const Icon(Icons.photo_camera_outlined),
                 label: const Text('Capture / Upload'),
               ),
-              if (_profileImageBytes != null ||
-                  (_currentProfileImage?.isNotEmpty ?? false))
+              if (_profileImageBytes != null || _currentProfileImage != null)
                 OutlinedButton(
                   onPressed: _saving ? null : _removeProfileImage,
                   child: const Text('Remove'),

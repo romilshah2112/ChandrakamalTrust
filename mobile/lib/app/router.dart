@@ -11,12 +11,14 @@ import 'package:optima_healthcare_mobile/features/auth/presentation/patient_dash
 import 'package:optima_healthcare_mobile/features/auth/presentation/profile_page.dart';
 import 'package:optima_healthcare_mobile/features/auth/presentation/receptionist_dashboard_screen.dart';
 import 'package:optima_healthcare_mobile/features/auth/presentation/user_dashboard_screen.dart';
+import 'package:optima_healthcare_mobile/features/auth/presentation/splash_screen.dart';
 import 'package:optima_healthcare_mobile/features/patients/presentation/my_patient_details_page.dart';
 import 'package:optima_healthcare_mobile/features/patients/presentation/new_patient_page.dart';
 import 'package:optima_healthcare_mobile/features/patients/presentation/view_patients_page.dart';
 import 'package:optima_healthcare_mobile/features/consultation/presentation/consultation_page.dart';
 
 class AppRouter {
+  static const String splash = '/splash';
   static const String login = '/';
   static const String forgotPassword = '/forgot-password';
   static const String resetPassword = '/reset-password';
@@ -39,6 +41,7 @@ class AppRouter {
   static const String consultation = '/consultation';
 
   static Map<String, WidgetBuilder> get routes => {
+    splash: (_) => const SplashScreen(),
     login: (_) => const LoginScreen(),
     forgotPassword: (_) => const ForgotPasswordScreen(),
     resetPassword: (_) => const ResetPasswordScreen(),
