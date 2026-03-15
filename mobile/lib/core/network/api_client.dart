@@ -8,10 +8,13 @@ import 'package:optima_healthcare_mobile/features/auth/models/user_profile.dart'
 import 'package:optima_healthcare_mobile/features/admin/models/clinic_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/clinic_schedule_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/doctor_profile_model.dart';
+import 'package:optima_healthcare_mobile/features/admin/models/invoice_type_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/staff_model.dart';
 import 'package:optima_healthcare_mobile/features/appointments/models/lookup_option_model.dart';
 import 'package:optima_healthcare_mobile/features/appointments/models/patient_appointment_model.dart';
 import 'package:optima_healthcare_mobile/features/auth/models/user_role_option.dart';
+import 'package:optima_healthcare_mobile/features/doctor_analytics/models/doctor_dashboard_analytics_model.dart';
+import 'package:optima_healthcare_mobile/features/invoices/models/patient_invoice_model.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_contact_update_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_create_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_data_update_request.dart';
@@ -67,13 +70,19 @@ class ApiClient {
     }
 
     if (response.statusCode == 409) {
-      throw const AuthException(
-        'User already exists with this mobile or email.',
+      final body = response.body.trim();
+      throw AuthException(
+        body.isEmpty
+            ? 'User already exists. Please click forgot password to retrieve the password.'
+            : body,
       );
     }
 
     if (response.statusCode == 400) {
-      throw const AuthException('Please check sign up details.');
+      final body = response.body.trim();
+      throw AuthException(
+        body.isEmpty ? 'Please check sign up details.' : body,
+      );
     }
 
     throw AuthException('Sign up failed: HTTP ${response.statusCode}');
@@ -346,6 +355,37 @@ class ApiClient {
     }
 
     throw AuthException('Delete patient failed: HTTP ${response.statusCode}');
+  }
+
+  Future<List<LookupOptionModel>> getReferenceTypes({
+    required String accessToken,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/api/v1/reference-types');
+    final response = await _httpClient.get(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map((item) {
+            final map = item as Map<String, dynamic>;
+            return LookupOptionModel(
+              id: (map['id'] as num).toInt(),
+              name: map['name'] as String? ?? '',
+            );
+          })
+          .toList();
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException('You are not allowed to view reference types.');
+    }
+
+    throw AuthException(
+      'Get reference types failed: HTTP ${response.statusCode}',
+    );
   }
 
   Future<UserProfileModel> getMyProfile({required String accessToken}) async {
@@ -643,6 +683,173 @@ class ApiClient {
     }
   }
 
+  Future<List<InvoiceTypeModel>> listInvoiceTypes({
+    required String accessToken,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse('$_baseUrl/api/v1/admin/masters/invoice-types'),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    if (response.statusCode != 200) {
+      throw AuthException(
+        'List invoice types failed: HTTP ${response.statusCode}',
+      );
+    }
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list
+        .map((e) => InvoiceTypeModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> saveInvoiceType({
+    required String accessToken,
+    int? id,
+    required Map<String, dynamic> body,
+  }) async {
+    final uri = Uri.parse(
+      id == null
+          ? '$_baseUrl/api/v1/admin/masters/invoice-types'
+          : '$_baseUrl/api/v1/admin/masters/invoice-types/$id',
+    );
+    final response = id == null
+        ? await _httpClient.post(
+            uri,
+            headers: {
+              'Authorization': 'Bearer $accessToken',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(body),
+          )
+        : await _httpClient.put(
+            uri,
+            headers: {
+              'Authorization': 'Bearer $accessToken',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(body),
+          );
+    if (response.statusCode != 201 && response.statusCode != 204) {
+      throw AuthException(
+        'Save invoice type failed: HTTP ${response.statusCode}',
+      );
+    }
+  }
+
+  Future<void> deleteInvoiceType({
+    required String accessToken,
+    required int id,
+  }) async {
+    final response = await _httpClient.delete(
+      Uri.parse('$_baseUrl/api/v1/admin/masters/invoice-types/$id'),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    if (response.statusCode != 204) {
+      throw AuthException(
+        'Delete invoice type failed: HTTP ${response.statusCode}',
+      );
+    }
+  }
+
+  Future<List<InvoiceTypeModel>> listInvoiceTypeLookup({
+    required String accessToken,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse('$_baseUrl/api/v1/invoices/lookups/invoice-types'),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    if (response.statusCode != 200) {
+      throw AuthException(
+        'Load invoice type lookup failed: HTTP ${response.statusCode}',
+      );
+    }
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list
+        .map((e) => InvoiceTypeModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<PatientInvoiceModel>> listInvoices({
+    required String accessToken,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse('$_baseUrl/api/v1/invoices'),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    if (response.statusCode != 200) {
+      throw AuthException('List invoices failed: HTTP ${response.statusCode}');
+    }
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list
+        .map((e) => PatientInvoiceModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<String> getNextInvoiceNumber({
+    required String accessToken,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse('$_baseUrl/api/v1/invoices/next-number'),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    if (response.statusCode != 200) {
+      throw AuthException(
+        'Load next invoice number failed: HTTP ${response.statusCode}',
+      );
+    }
+    final map = jsonDecode(response.body) as Map<String, dynamic>;
+    return map['invoiceNumber'] as String? ?? 'PHCC-0001';
+  }
+
+  Future<void> saveInvoice({
+    required String accessToken,
+    required Map<String, dynamic> body,
+    int? id,
+  }) async {
+    final uri = Uri.parse(
+      id == null
+          ? '$_baseUrl/api/v1/invoices'
+          : '$_baseUrl/api/v1/invoices/$id',
+    );
+    final response = id == null
+        ? await _httpClient.post(
+            uri,
+            headers: {
+              'Authorization': 'Bearer $accessToken',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(body),
+          )
+        : await _httpClient.put(
+            uri,
+            headers: {
+              'Authorization': 'Bearer $accessToken',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(body),
+          );
+    if (response.statusCode != 201 && response.statusCode != 204) {
+      final bodyText = response.body.trim();
+      throw AuthException(
+        bodyText.isEmpty
+            ? 'Save invoice failed: HTTP ${response.statusCode}'
+            : bodyText,
+      );
+    }
+  }
+
+  Future<void> deleteInvoice({
+    required String accessToken,
+    required int id,
+  }) async {
+    final response = await _httpClient.delete(
+      Uri.parse('$_baseUrl/api/v1/invoices/$id'),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    if (response.statusCode != 204) {
+      throw AuthException('Delete invoice failed: HTTP ${response.statusCode}');
+    }
+  }
+
   Future<List<PatientAppointmentModel>> listAppointments({
     required String accessToken,
     DateTime? from,
@@ -679,6 +886,22 @@ class ApiClient {
     return list
         .map((e) => PatientAppointmentModel.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<DoctorDashboardAnalyticsModel> getDoctorDashboardAnalytics({
+    required String accessToken,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse('$_baseUrl/api/v1/doctor-analytics/dashboard'),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode != 200) {
+      throw _toAuthException('Load doctor analytics failed', response);
+    }
+
+    final map = jsonDecode(response.body) as Map<String, dynamic>;
+    return DoctorDashboardAnalyticsModel.fromJson(map);
   }
 
   Future<void> saveAppointment({

@@ -4,6 +4,7 @@ import 'package:optima_healthcare_mobile/app/theme.dart';
 import 'package:optima_healthcare_mobile/features/appointments/presentation/appointments_page.dart';
 import 'package:optima_healthcare_mobile/features/auth/models/auth_session.dart';
 import 'package:optima_healthcare_mobile/features/auth/presentation/dashboard_home_content.dart';
+import 'package:optima_healthcare_mobile/features/doctor_analytics/presentation/doctor_home_overview.dart';
 import 'package:optima_healthcare_mobile/features/auth/presentation/profile_page.dart';
 import 'package:optima_healthcare_mobile/shared/widgets/brand_logo.dart';
 
@@ -54,6 +55,12 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
         centerTitle: false,
         title: const BrandLogo(height: 44),
         actions: [
+          if (role.toLowerCase().contains('doctor'))
+            IconButton(
+              icon: const Icon(Icons.insights_outlined),
+              tooltip: 'Analytics',
+              onPressed: () => Navigator.of(context).pushNamed(AppRouter.doctorAnalytics),
+            ),
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
             tooltip: 'Notifications',
@@ -147,6 +154,14 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
                 setState(() => _selectedNavIndex = 1);
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.receipt_long),
+              title: const Text('Invoices'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).pushNamed(AppRouter.invoices);
+              },
+            ),
             if (role.toLowerCase().contains('doctor'))
               ListTile(
                 leading: const Icon(Icons.record_voice_over),
@@ -200,6 +215,14 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
                   ).pushNamed(AppRouter.clinicScheduleMaster);
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.receipt_long_outlined),
+                title: const Text('Invoice Type'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).pushNamed(AppRouter.invoiceTypeMaster);
+                },
+              ),
             ],
           ],
         ),
@@ -211,6 +234,11 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
             displayName: firstName.isNotEmpty ? firstName : displayName,
             welcomeSubtitle:
                 'Use quick actions or the menu to manage patients and appointments.',
+            supplementarySections: role.toLowerCase().contains('doctor')
+                ? const [
+                    DoctorHomeOverview(),
+                  ]
+                : const [],
             quickActions: [
               QuickActionItem(
                 icon: Icons.person_add_alt_1,
@@ -231,6 +259,12 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
                 label: 'Appointments',
                 color: AppTheme.accentOrange,
                 onTap: () => setState(() => _selectedNavIndex = 1),
+              ),
+              QuickActionItem(
+                icon: Icons.receipt_long,
+                label: 'Invoices',
+                color: primary,
+                onTap: () => Navigator.of(context).pushNamed(AppRouter.invoices),
               ),
               QuickActionItem(
                 icon: Icons.emergency,
@@ -267,7 +301,7 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
           NavigationDestination(
             icon: Icon(Icons.calendar_today_outlined),
             selectedIcon: Icon(Icons.calendar_today),
-            label: 'Appointments',
+            label: 'Schedule',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

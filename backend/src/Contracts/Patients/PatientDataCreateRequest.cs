@@ -10,7 +10,6 @@ public sealed class PatientDataCreateRequest
     public string Gender { get; set; } = string.Empty;
     public string City { get; set; } = string.Empty;
     public DateOnly BirthDate { get; set; }
-    public string Password { get; set; } = string.Empty;
     public string? ImageName { get; set; }
     public string? ImageBase64 { get; set; }
     public string? ImageFileName { get; set; }

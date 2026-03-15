@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OptimaHealthcare.Api.Security;
 using OptimaHealthcare.Application.Abstractions;
 using OptimaHealthcare.Contracts.Consultation;
 
@@ -48,7 +49,7 @@ public sealed class ConsultationController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> SaveNotes([FromBody] SaveConsultationNotesRequest request, CancellationToken cancellationToken)
     {
-        var appUserId = GetAppUserId();
+        var appUserId = User.GetAppUserId();
         if (appUserId <= 0)
         {
             return Forbid();
@@ -72,11 +73,5 @@ public sealed class ConsultationController : ControllerBase
         {
             return BadRequest(ex.Message);
         }
-    }
-
-    private int GetAppUserId()
-    {
-        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return int.TryParse(claim, out var id) ? id : 0;
     }
 }

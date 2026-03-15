@@ -24,6 +24,7 @@ class DashboardHomeContent extends StatelessWidget {
     required this.quickActions,
     this.viewProgressLabel,
     this.onViewProgress,
+    this.supplementarySections = const [],
   });
 
   final String displayName;
@@ -31,6 +32,7 @@ class DashboardHomeContent extends StatelessWidget {
   final List<QuickActionItem> quickActions;
   final String? viewProgressLabel;
   final VoidCallback? onViewProgress;
+  final List<Widget> supplementarySections;
 
   static String _displayNameFromUsername(String? username) {
     if (username == null || username.isEmpty) return 'there';
@@ -93,6 +95,10 @@ class DashboardHomeContent extends StatelessWidget {
               ],
             ),
           ),
+          if (supplementarySections.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            ...supplementarySections,
+          ],
           const SizedBox(height: 24),
           // Quick Actions
           Text(
@@ -106,7 +112,7 @@ class DashboardHomeContent extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               const spacing = 20.0;
-              const count = 4;
+              final count = constraints.maxWidth < 360 ? 3 : 4;
               final size = (constraints.maxWidth - (count - 1) * spacing) / count;
               return Wrap(
                 spacing: spacing,
@@ -172,6 +178,8 @@ class _QuickActionChip extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelMedium?.copyWith(
                 color: AppTheme.brandCharcoal,
+                fontSize: 12,
+                height: 1.15,
               ),
             ),
           ],

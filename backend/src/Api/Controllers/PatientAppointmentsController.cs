@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
+using OptimaHealthcare.Api.Security;
 using OptimaHealthcare.Application.Abstractions;
 using OptimaHealthcare.Contracts.Appointments;
 using OptimaHealthcare.Contracts.Masters;
@@ -14,15 +16,19 @@ namespace OptimaHealthcare.Api.Controllers;
 [Route("api/v1/appointments")]
 public sealed class PatientAppointmentsController : ControllerBase
 {
+    private static readonly string[] AppointmentManagerRoles = ["admin", "doctor", "receptionist"];
+    private readonly ILogger<PatientAppointmentsController> _logger;
     private readonly IPatientAppointmentService _appointmentService;
     private readonly IPatientDataService _patientDataService;
     private readonly IMasterDataService _masterDataService;
 
     public PatientAppointmentsController(
+        ILogger<PatientAppointmentsController> logger,
         IPatientAppointmentService appointmentService,
         IPatientDataService patientDataService,
         IMasterDataService masterDataService)
     {
+        _logger = logger;
         _appointmentService = appointmentService;
         _patientDataService = patientDataService;
         _masterDataService = masterDataService;
@@ -36,8 +42,9 @@ public sealed class PatientAppointmentsController : ControllerBase
         [FromQuery] int? clinicId,
         CancellationToken cancellationToken)
     {
-        var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
-        var appUserId = GetAppUserId();
+        LogAuthState("List");
+        var role = User.GetRoleName();
+        var appUserId = User.GetAppUserId();
         if (appUserId <= 0)
         {
             return Forbid();
@@ -48,18 +55,23 @@ public sealed class PatientAppointmentsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin,Doctor,Receptionist")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> Create([FromBody] SavePatientAppointmentRequest request, CancellationToken cancellationToken)
     {
+        LogAuthState("Create");
+        if (!CanManageAppointments())
+        {
+            return Forbid();
+        }
+
         if (!ValidateSaveRequest(request, out var error))
         {
             return BadRequest(error);
         }
 
-        var appUserId = GetAppUserId();
-        var username = User.FindFirstValue(ClaimTypes.Name) ?? string.Empty;
+        var appUserId = User.GetAppUserId();
+        var username = User.GetLoginName() ?? string.Empty;
         if (appUserId <= 0)
         {
             return Forbid();
@@ -81,18 +93,23 @@ public sealed class PatientAppointmentsController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "Admin,Doctor,Receptionist")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> Update(int id, [FromBody] SavePatientAppointmentRequest request, CancellationToken cancellationToken)
     {
+        LogAuthState("Update");
+        if (!CanManageAppointments())
+        {
+            return Forbid();
+        }
+
         if (!ValidateSaveRequest(request, out var error))
         {
             return BadRequest(error);
         }
 
-        var appUserId = GetAppUserId();
-        var username = User.FindFirstValue(ClaimTypes.Name) ?? string.Empty;
+        var appUserId = User.GetAppUserId();
+        var username = User.GetLoginName() ?? string.Empty;
         if (appUserId <= 0)
         {
             return Forbid();
@@ -114,25 +131,44 @@ public sealed class PatientAppointmentsController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "Admin,Doctor,Receptionist")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> Delete(int id, CancellationToken cancellationToken)
     {
+        LogAuthState("Delete");
+        if (!CanManageAppointments())
+        {
+            return Forbid();
+        }
+
         await _appointmentService.DeleteAsync(id, cancellationToken);
         return NoContent();
     }
 
     [HttpGet("lookups/patients")]
-    [Authorize(Roles = "Admin,Doctor,Receptionist")]
     [ProducesResponseType(typeof(IReadOnlyList<PatientListItemResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<PatientListItemResponse>>> Patients(CancellationToken cancellationToken)
-        => Ok(await _patientDataService.ListAsync(null, cancellationToken));
+    {
+        LogAuthState("PatientsLookup");
+        if (!CanManageAppointments())
+        {
+            return Forbid();
+        }
+
+        return Ok(await _patientDataService.ListAsync(null, cancellationToken));
+    }
 
     [HttpGet("lookups/doctors")]
-    [Authorize(Roles = "Admin,Doctor,Receptionist")]
     [ProducesResponseType(typeof(IReadOnlyList<DoctorProfileDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<DoctorProfileDto>>> Doctors(CancellationToken cancellationToken)
-        => Ok(await _masterDataService.ListDoctorProfilesAsync(cancellationToken));
+    {
+        LogAuthState("DoctorsLookup");
+        if (!CanManageAppointments())
+        {
+            return Forbid();
+        }
+
+        return Ok(await _masterDataService.ListDoctorProfilesAsync(cancellationToken));
+    }
 
     [HttpGet("lookups/clinics")]
     [ProducesResponseType(typeof(IReadOnlyList<ClinicDto>), StatusCodes.Status200OK)]
@@ -154,10 +190,34 @@ public sealed class PatientAppointmentsController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<AppointmentTypeDto>>> AppointmentTypes(CancellationToken cancellationToken)
         => Ok(await _appointmentService.ListAppointmentTypesAsync(cancellationToken));
 
-    private int GetAppUserId()
+    private bool CanManageAppointments()
     {
-        var appUserIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return int.TryParse(appUserIdClaim, out var appUserId) ? appUserId : 0;
+        var role = User.GetRoleName();
+        var allowed = AppointmentManagerRoles.Any(allowedRole =>
+            role.Contains(allowedRole, StringComparison.OrdinalIgnoreCase));
+
+        _logger.LogInformation(
+            "Appointments auth check. allowed={Allowed} role={Role} appUserId={AppUserId}",
+            allowed,
+            role,
+            User.GetAppUserId());
+
+        return allowed;
+    }
+
+    private void LogAuthState(string actionName)
+    {
+        var claims = User.Claims
+            .Select(c => $"{c.Type}={c.Value}")
+            .ToArray();
+
+        _logger.LogInformation(
+            "Appointments {Action} request auth. isAuthenticated={IsAuthenticated} appUserId={AppUserId} role={Role} claims=[{Claims}]",
+            actionName,
+            User.Identity?.IsAuthenticated ?? false,
+            User.GetAppUserId(),
+            User.GetRoleName(),
+            string.Join(", ", claims));
     }
 
     private static bool ValidateSaveRequest(SavePatientAppointmentRequest request, out string error)
@@ -192,5 +252,3 @@ public sealed class PatientAppointmentsController : ControllerBase
         return true;
     }
 }
-
-

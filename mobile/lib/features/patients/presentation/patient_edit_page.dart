@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:optima_healthcare_mobile/core/network/api_client.dart';
+import 'package:optima_healthcare_mobile/features/appointments/models/lookup_option_model.dart';
 import 'package:optima_healthcare_mobile/features/auth/models/auth_session.dart';
 import 'package:optima_healthcare_mobile/features/patients/data/patient_repository.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_data_update_request.dart';
@@ -26,6 +27,11 @@ class PatientEditPage extends StatefulWidget {
 
 class _PatientEditPageState extends State<PatientEditPage> {
   static const int _maxImageBytes = 50 * 1024;
+  static const List<String> _genderOptions = ['Male', 'Female', 'Transgender'];
+  static const List<String> _monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
 
   final _formKey = GlobalKey<FormState>();
   final _repo = PatientRepository();
@@ -36,11 +42,15 @@ class _PatientEditPageState extends State<PatientEditPage> {
   late final TextEditingController _mobile;
   late final TextEditingController _email;
   late final TextEditingController _address;
-  late final TextEditingController _gender;
   late final TextEditingController _city;
-  late final TextEditingController _birthDate;
-  late final TextEditingController _referenceTypeId;
   late final TextEditingController _referenceName;
+
+  String? _selectedGender;
+  DateTime? _selectedBirthDate;
+  List<LookupOptionModel> _referenceTypes = [];
+  int? _selectedReferenceTypeId;
+  bool _referenceTypesLoading = true;
+  String? _referenceTypesError;
 
   bool _saving = false;
   String? _error;
@@ -59,13 +69,14 @@ class _PatientEditPageState extends State<PatientEditPage> {
     _mobile = TextEditingController(text: '${p.mobileNo}');
     _email = TextEditingController(text: p.email);
     _address = TextEditingController(text: p.address);
-    _gender = TextEditingController(text: p.gender);
     _city = TextEditingController(text: p.city);
-    _birthDate = TextEditingController(text: p.birthDate);
-    _referenceTypeId = TextEditingController(text: '${p.referenceTypeId}');
     _referenceName = TextEditingController(text: p.referenceName);
+    _selectedGender = _genderOptions.contains(p.gender) ? p.gender : null;
+    _selectedBirthDate = _parseApiDate(p.birthDate);
+    _selectedReferenceTypeId = p.referenceTypeId > 0 ? p.referenceTypeId : null;
     _isActive = p.isActive;
     _currentImageUrl = _normalizeRemoteImageUrl(p.imageName);
+    _loadReferenceTypes();
   }
 
   @override
@@ -75,12 +86,74 @@ class _PatientEditPageState extends State<PatientEditPage> {
     _mobile.dispose();
     _email.dispose();
     _address.dispose();
-    _gender.dispose();
     _city.dispose();
-    _birthDate.dispose();
-    _referenceTypeId.dispose();
     _referenceName.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadReferenceTypes() async {
+    final token = AuthSession.accessToken;
+    if (token == null) {
+      setState(() {
+        _referenceTypesLoading = false;
+        _referenceTypesError = 'Session expired. Please login again.';
+      });
+      return;
+    }
+
+    try {
+      final list = await _repo.getReferenceTypes(accessToken: token);
+      setState(() {
+        _referenceTypes = list;
+        _referenceTypesLoading = false;
+        _referenceTypesError = null;
+        if (_selectedReferenceTypeId != null &&
+            !list.any((item) => item.id == _selectedReferenceTypeId)) {
+          _selectedReferenceTypeId = null;
+        }
+        if (_selectedReferenceTypeId == null && list.isNotEmpty) {
+          _selectedReferenceTypeId = list.first.id;
+        }
+      });
+    } catch (ex) {
+      setState(() {
+        _referenceTypesLoading = false;
+        _referenceTypesError = ex.toString();
+      });
+    }
+  }
+
+  DateTime? _parseApiDate(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+
+    final parts = trimmed.split('-');
+    if (parts.length != 3) {
+      return DateTime.tryParse(trimmed);
+    }
+
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) {
+      return DateTime.tryParse(trimmed);
+    }
+
+    try {
+      return DateTime(year, month, day);
+    } catch (_) {
+      return DateTime.tryParse(trimmed);
+    }
+  }
+
+  String _formatBirthDate(DateTime d) {
+    return '${d.day.toString().padLeft(2, '0')}-${_monthNames[d.month - 1]}-${d.year}';
+  }
+
+  String _birthDateToApi(DateTime d) {
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   }
 
   Future<void> _pickProfileImage() async {
@@ -206,6 +279,18 @@ class _PatientEditPageState extends State<PatientEditPage> {
       setState(() => _error = 'Session expired. Please login again.');
       return;
     }
+    if (_selectedGender == null || _selectedGender!.isEmpty) {
+      setState(() => _error = 'Please select Gender.');
+      return;
+    }
+    if (_selectedBirthDate == null) {
+      setState(() => _error = 'Please select Birth Date.');
+      return;
+    }
+    if (_selectedReferenceTypeId == null) {
+      setState(() => _error = 'Please select Reference.');
+      return;
+    }
 
     setState(() {
       _saving = true;
@@ -222,16 +307,16 @@ class _PatientEditPageState extends State<PatientEditPage> {
           mobileNo: int.parse(_mobile.text.trim()),
           email: _email.text.trim(),
           address: _address.text.trim(),
-          gender: _gender.text.trim(),
+          gender: _selectedGender!,
           city: _city.text.trim(),
-          birthDate: _birthDate.text.trim(),
+          birthDate: _birthDateToApi(_selectedBirthDate!),
           imageName: _profileImageBytes == null ? _currentImageUrl : null,
           imageBase64: _profileImageBytes == null
               ? null
               : base64Encode(_profileImageBytes!),
           imageFileName: _profileImageFileName,
           imageContentType: _profileImageContentType,
-          referenceTypeId: int.parse(_referenceTypeId.text.trim()),
+          referenceTypeId: _selectedReferenceTypeId!,
           referenceName: _referenceName.text.trim(),
           isActive: _isActive,
         ),
@@ -314,13 +399,7 @@ class _PatientEditPageState extends State<PatientEditPage> {
                 ),
               ),
               const SizedBox(height: 10),
-              TextFormField(
-                controller: _gender,
-                decoration: const InputDecoration(
-                  labelText: 'Gender',
-                  border: OutlineInputBorder(),
-                ),
-              ),
+              _genderDropdown(),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _city,
@@ -330,29 +409,9 @@ class _PatientEditPageState extends State<PatientEditPage> {
                 ),
               ),
               const SizedBox(height: 10),
-              TextFormField(
-                controller: _birthDate,
-                decoration: const InputDecoration(
-                  labelText: 'Birth date (YYYY-MM-DD)',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
-              ),
+              _birthDateField(),
               const SizedBox(height: 10),
-              TextFormField(
-                controller: _referenceTypeId,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Reference type ID',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'Required';
-                  if (int.tryParse(v.trim()) == null) return 'Must be numeric';
-                  return null;
-                },
-              ),
+              _referenceDropdown(),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _referenceName,
@@ -420,12 +479,12 @@ class _PatientEditPageState extends State<PatientEditPage> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Profile Picture',
+            'Photo',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 4),
           Text(
-            'Capture or upload a picture under 50KB.',
+            'Capture or upload a photo under 50KB.',
             style: Theme.of(context).textTheme.bodySmall,
             textAlign: TextAlign.center,
           ),
@@ -449,6 +508,99 @@ class _PatientEditPageState extends State<PatientEditPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _genderDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _selectedGender,
+      decoration: const InputDecoration(
+        labelText: 'Gender',
+        border: OutlineInputBorder(),
+      ),
+      hint: const Text('Select Gender'),
+      items: _genderOptions
+          .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+          .toList(),
+      onChanged: _saving
+          ? null
+          : (value) {
+              setState(() => _selectedGender = value);
+            },
+      validator: (value) {
+        if (value == null || value.isEmpty) return 'Required';
+        return null;
+      },
+    );
+  }
+
+  Future<void> _pickBirthDate() async {
+    final now = DateTime.now();
+    final initialDate = _selectedBirthDate ?? DateTime(now.year - 18, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(1900),
+      lastDate: now,
+    );
+    if (picked != null) {
+      setState(() => _selectedBirthDate = picked);
+    }
+  }
+
+  Widget _birthDateField() {
+    return InkWell(
+      onTap: _saving ? null : _pickBirthDate,
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Birth Date (DD-MMM-YYYY)',
+          border: OutlineInputBorder(),
+        ),
+        child: Text(
+          _selectedBirthDate == null
+              ? 'Tap to select date'
+              : _formatBirthDate(_selectedBirthDate!),
+          style: TextStyle(
+            color: _selectedBirthDate == null ? Theme.of(context).hintColor : null,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _referenceDropdown() {
+    if (_referenceTypesLoading) {
+      return const LinearProgressIndicator();
+    }
+    if (_referenceTypesError != null) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Text(
+          _referenceTypesError!,
+          style: const TextStyle(color: Colors.orange),
+        ),
+      );
+    }
+
+    return DropdownButtonFormField<int>(
+      value: _selectedReferenceTypeId,
+      decoration: const InputDecoration(
+        labelText: 'Reference',
+        border: OutlineInputBorder(),
+      ),
+      hint: const Text('Select Reference'),
+      items: _referenceTypes
+          .map((rt) => DropdownMenuItem(value: rt.id, child: Text(rt.name)))
+          .toList(),
+      onChanged: _saving
+          ? null
+          : (value) {
+              setState(() => _selectedReferenceTypeId = value);
+            },
+      validator: (value) {
+        if (value == null) return 'Required';
+        return null;
+      },
     );
   }
 }

@@ -11,7 +11,9 @@ import 'package:optima_healthcare_mobile/features/auth/presentation/patient_dash
 import 'package:optima_healthcare_mobile/features/auth/presentation/profile_page.dart';
 import 'package:optima_healthcare_mobile/features/auth/presentation/receptionist_dashboard_screen.dart';
 import 'package:optima_healthcare_mobile/features/auth/presentation/user_dashboard_screen.dart';
+import 'package:optima_healthcare_mobile/features/doctor_analytics/presentation/doctor_analytics_page.dart';
 import 'package:optima_healthcare_mobile/features/auth/presentation/splash_screen.dart';
+import 'package:optima_healthcare_mobile/features/invoices/presentation/invoices_page.dart';
 import 'package:optima_healthcare_mobile/features/patients/presentation/my_patient_details_page.dart';
 import 'package:optima_healthcare_mobile/features/patients/presentation/new_patient_page.dart';
 import 'package:optima_healthcare_mobile/features/patients/presentation/view_patients_page.dart';
@@ -38,7 +40,10 @@ class AppRouter {
   static const String doctorMaster = '/master-doctor';
   static const String staffMaster = '/master-staff';
   static const String clinicScheduleMaster = '/master-clinic-schedule';
+  static const String invoiceTypeMaster = '/master-invoice-type';
+  static const String invoices = '/invoices';
   static const String consultation = '/consultation';
+  static const String doctorAnalytics = '/doctor-analytics';
 
   static Map<String, WidgetBuilder> get routes => {
     splash: (_) => const SplashScreen(),
@@ -61,7 +66,10 @@ class AppRouter {
     doctorMaster: (_) => const DoctorMasterPage(),
     staffMaster: (_) => const StaffMasterPage(),
     clinicScheduleMaster: (_) => const ClinicScheduleMasterPage(),
+    invoiceTypeMaster: (_) => const InvoiceTypeMasterPage(),
+    invoices: (_) => const InvoicesPage(),
     consultation: (_) => const ConsultationPage(),
+    doctorAnalytics: (_) => const DoctorAnalyticsPage(),
   };
 
   static String routeForRole(String role) {

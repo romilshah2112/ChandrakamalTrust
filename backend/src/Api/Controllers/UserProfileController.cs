@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OptimaHealthcare.Api.Security;
 using OptimaHealthcare.Application.Abstractions;
 using OptimaHealthcare.Contracts.Auth;
 
@@ -23,8 +24,8 @@ public sealed class UserProfileController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<UserProfileResponse>> GetMe(CancellationToken cancellationToken)
     {
-        var appUserId = GetAppUserIdFromClaims();
-        var login = User.FindFirstValue(ClaimTypes.Name);
+        var appUserId = User.GetAppUserId();
+        var login = User.GetLoginName();
 
         if (appUserId <= 0 && string.IsNullOrWhiteSpace(login))
         {
@@ -68,8 +69,8 @@ public sealed class UserProfileController : ControllerBase
             return BadRequest("Mobile number must be numeric.");
         }
 
-        var appUserId = GetAppUserIdFromClaims();
-        var login = User.FindFirstValue(ClaimTypes.Name);
+        var appUserId = User.GetAppUserId();
+        var login = User.GetLoginName();
 
         if (appUserId <= 0 && string.IsNullOrWhiteSpace(login))
         {
@@ -101,11 +102,5 @@ public sealed class UserProfileController : ControllerBase
         {
             return BadRequest(ex.Message);
         }
-    }
-
-    private int GetAppUserIdFromClaims()
-    {
-        var appUserIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return int.TryParse(appUserIdClaim, out var appUserId) ? appUserId : 0;
     }
 }

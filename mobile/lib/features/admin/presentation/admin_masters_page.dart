@@ -3,6 +3,7 @@ import 'package:optima_healthcare_mobile/features/admin/data/admin_master_reposi
 import 'package:optima_healthcare_mobile/features/admin/models/clinic_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/clinic_schedule_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/doctor_profile_model.dart';
+import 'package:optima_healthcare_mobile/features/admin/models/invoice_type_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/staff_model.dart';
 import 'package:optima_healthcare_mobile/features/auth/models/auth_session.dart';
 
@@ -38,6 +39,14 @@ class ClinicScheduleMasterPage extends StatelessWidget {
       const AdminMastersPage(initialTab: 3, showTabs: false);
 }
 
+class InvoiceTypeMasterPage extends StatelessWidget {
+  const InvoiceTypeMasterPage({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      const AdminMastersPage(initialTab: 4, showTabs: false);
+}
+
 class AdminMastersPage extends StatefulWidget {
   const AdminMastersPage({
     super.key,
@@ -63,14 +72,15 @@ class _AdminMastersPageState extends State<AdminMastersPage>
   List<DoctorProfileModel> _doctors = const [];
   List<StaffModel> _staff = const [];
   List<ClinicScheduleModel> _clinicSchedules = const [];
+  List<InvoiceTypeModel> _invoiceTypes = const [];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 4,
+      length: 5,
       vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 3),
+      initialIndex: widget.initialTab.clamp(0, 4),
     );
     _tabController.addListener(() {
       if (mounted) {
@@ -106,11 +116,13 @@ class _AdminMastersPageState extends State<AdminMastersPage>
       final doctors = await _repo.listDoctorProfiles(token);
       final staff = await _repo.listStaff(token);
       final schedules = await _repo.listClinicSchedules(token);
+      final invoiceTypes = await _repo.listInvoiceTypes(token);
       setState(() {
         _clinics = clinics;
         _doctors = doctors;
         _staff = staff;
         _clinicSchedules = schedules;
+        _invoiceTypes = invoiceTypes;
       });
     } catch (ex) {
       setState(() {
@@ -140,8 +152,10 @@ class _AdminMastersPageState extends State<AdminMastersPage>
         return 'Doctor';
       case 2:
         return 'Staff';
-      default:
+      case 3:
         return 'Clinic Schedule';
+      default:
+        return 'Invoice Type';
     }
   }
 
@@ -162,6 +176,7 @@ class _AdminMastersPageState extends State<AdminMastersPage>
                   Tab(text: 'Doctor'),
                   Tab(text: 'Staff'),
                   Tab(text: 'Clinic Schedule'),
+                  Tab(text: 'Invoice Type'),
                 ],
               )
             : null,
@@ -196,6 +211,7 @@ class _AdminMastersPageState extends State<AdminMastersPage>
                   _doctorList(),
                   _staffList(),
                   _clinicScheduleList(),
+                  _invoiceTypeList(),
                 ],
               )
             : _singleList(),
@@ -211,8 +227,10 @@ class _AdminMastersPageState extends State<AdminMastersPage>
         return _doctorList();
       case 2:
         return _staffList();
-      default:
+      case 3:
         return _clinicScheduleList();
+      default:
+        return _invoiceTypeList();
     }
   }
 
@@ -223,8 +241,10 @@ class _AdminMastersPageState extends State<AdminMastersPage>
       _showDoctorDialog();
     } else if (_tabController.index == 2) {
       _showStaffDialog();
-    } else {
+    } else if (_tabController.index == 3) {
       _showClinicScheduleDialog();
+    } else {
+      _showInvoiceTypeDialog();
     }
   }
 
@@ -254,10 +274,11 @@ class _AdminMastersPageState extends State<AdminMastersPage>
       padding: const EdgeInsets.all(12),
       itemBuilder: (context, index) {
         final d = _doctors[index];
+        final clinicName = _clinicName(d.clinicId);
         return _masterCard(
           icon: Icons.medical_services,
           title: d.name,
-          subtitle: 'Clinic: ${d.clinicId} | ${d.phone} | ${d.email}',
+          subtitle: 'Clinic: $clinicName | ${d.phone} | ${d.email}',
           isActive: d.isActive,
           onEdit: () => _showDoctorDialog(existing: d),
           onDelete: () =>
@@ -303,12 +324,36 @@ class _AdminMastersPageState extends State<AdminMastersPage>
         return _masterCard(
           icon: Icons.schedule,
           title: '$clinicName | ${_dayLabel(s.dayOfWeek)}',
-          subtitle: '$timing | AppUser: ${s.appUserId}',
+          subtitle:
+              '$timing | AppUser: ${s.appUserName.isEmpty ? 'User #${s.appUserId}' : s.appUserName}',
           isActive: true,
           onEdit: () => _showClinicScheduleDialog(existing: s),
           onDelete: () => _confirmDelete(
             'clinic schedule',
             () => _deleteClinicSchedule(s.id),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _invoiceTypeList() {
+    if (_invoiceTypes.isEmpty) return _emptyCard('No invoice types found.');
+    return ListView.builder(
+      itemCount: _invoiceTypes.length,
+      padding: const EdgeInsets.all(12),
+      itemBuilder: (context, index) {
+        final item = _invoiceTypes[index];
+        return _masterCard(
+          icon: Icons.receipt_long,
+          title: item.name,
+          subtitle:
+              'Charges: ${item.charges.toStringAsFixed(2)}${item.description.isEmpty ? '' : ' | ${item.description}'}',
+          isActive: item.isActive,
+          onEdit: () => _showInvoiceTypeDialog(existing: item),
+          onDelete: () => _confirmDelete(
+            'invoice type',
+            () => _deleteInvoiceType(item.id),
           ),
         );
       },
@@ -464,9 +509,13 @@ class _AdminMastersPageState extends State<AdminMastersPage>
 
   Future<void> _showDoctorDialog({DoctorProfileModel? existing}) async {
     final name = TextEditingController(text: existing?.name ?? '');
-    final clinicId = TextEditingController(
-      text: existing == null ? '1' : '${existing.clinicId}',
-    );
+    if (_clinics.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please create at least one clinic first.')),
+      );
+      return;
+    }
+    var selectedClinicId = existing?.clinicId ?? _clinics.first.id;
     final phone = TextEditingController(
       text: existing == null ? '' : '${existing.phone}',
     );
@@ -476,7 +525,33 @@ class _AdminMastersPageState extends State<AdminMastersPage>
       title: existing == null ? 'Add Doctor' : 'Update Doctor',
       children: [
         _styledField(name, 'Doctor Name', Icons.person),
-        _styledField(clinicId, 'Clinic Id', Icons.account_tree, numeric: true),
+        DropdownButtonFormField<int>(
+          initialValue: selectedClinicId,
+          decoration: InputDecoration(
+            labelText: 'Clinic',
+            prefixIcon: const Icon(Icons.local_hospital_outlined),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            filled: true,
+            fillColor: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest
+                .withValues(alpha: 0.35),
+          ),
+          items: _clinics
+              .map(
+                (clinic) => DropdownMenuItem<int>(
+                  value: clinic.id,
+                  child: Text(clinic.name),
+                ),
+              )
+              .toList(),
+          onChanged: (value) {
+            if (value != null) {
+              selectedClinicId = value;
+            }
+          },
+        ),
+        const SizedBox(height: 12),
         _styledField(phone, 'Phone', Icons.phone, numeric: true),
         _styledField(email, 'Email', Icons.email),
       ],
@@ -487,7 +562,7 @@ class _AdminMastersPageState extends State<AdminMastersPage>
           'doctorName': name.text,
           'doctorDegree': '',
           'doctorStream': '',
-          'clinicId': int.tryParse(clinicId.text) ?? 1,
+          'clinicId': selectedClinicId,
           'doctorCity': '',
           'countryId': 1,
           'phone': int.tryParse(phone.text) ?? 0,
@@ -720,17 +795,62 @@ class _AdminMastersPageState extends State<AdminMastersPage>
     );
   }
 
+  Future<void> _showInvoiceTypeDialog({InvoiceTypeModel? existing}) async {
+    final name = TextEditingController(text: existing?.name ?? '');
+    final description = TextEditingController(text: existing?.description ?? '');
+    final charges = TextEditingController(
+      text: existing == null ? '' : existing.charges.toStringAsFixed(2),
+    );
+    var isActive = existing?.isActive ?? true;
+
+    await _showStyledDialog(
+      title: existing == null ? 'Add Invoice Type' : 'Update Invoice Type',
+      children: [
+        _styledField(name, 'Invoice Type Name', Icons.receipt_long),
+        _styledField(
+          charges,
+          'Charges',
+          Icons.currency_rupee,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        ),
+        _styledField(description, 'Description', Icons.notes),
+        StatefulBuilder(
+          builder: (context, setStateDialog) => SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Active'),
+            value: isActive,
+            onChanged: (value) => setStateDialog(() => isActive = value),
+          ),
+        ),
+      ],
+      onSave: () async {
+        final token = AuthSession.accessToken;
+        if (token == null) return;
+        await _repo.saveInvoiceType(token, {
+          'invoiceTypeName': name.text.trim(),
+          'description': description.text.trim(),
+          'charges': double.tryParse(charges.text.trim()) ?? 0,
+          'isActive': isActive,
+        }, id: existing?.id);
+        await _load();
+      },
+    );
+  }
+
   Widget _styledField(
     TextEditingController c,
     String label,
     IconData icon, {
     bool numeric = false,
+    TextInputType? keyboardType,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
         controller: c,
-        keyboardType: numeric ? TextInputType.number : TextInputType.text,
+        keyboardType:
+            keyboardType ??
+            (numeric ? TextInputType.number : TextInputType.text),
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: Icon(icon),
@@ -877,6 +997,13 @@ class _AdminMastersPageState extends State<AdminMastersPage>
     final token = AuthSession.accessToken;
     if (token == null) return;
     await _repo.deleteClinicSchedule(token, id);
+    await _load();
+  }
+
+  Future<void> _deleteInvoiceType(int id) async {
+    final token = AuthSession.accessToken;
+    if (token == null) return;
+    await _repo.deleteInvoiceType(token, id);
     await _load();
   }
 }

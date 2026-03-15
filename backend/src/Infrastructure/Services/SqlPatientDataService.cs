@@ -8,15 +8,12 @@ namespace OptimaHealthcare.Infrastructure.Services;
 public sealed class SqlPatientDataService : IPatientDataService
 {
     private readonly string _connectionString;
-    private readonly IPasswordCryptoService _passwordCryptoService;
     private readonly IImageStorageService _imageStorageService;
 
     public SqlPatientDataService(
         IConfiguration configuration,
-        IPasswordCryptoService passwordCryptoService,
         IImageStorageService imageStorageService)
     {
-        _passwordCryptoService = passwordCryptoService;
         _imageStorageService = imageStorageService;
         _connectionString = configuration.GetConnectionString("HealthCareContext")
             ?? configuration.GetConnectionString("DefaultConnection")
@@ -33,11 +30,11 @@ public sealed class SqlPatientDataService : IPatientDataService
         const string sql = @"
 INSERT INTO [patientdata]
     ([FirstName], [LastName], [MobileNo], [Email], [Address], [Gender], [City], [BirthDate], [CreatedDate],
-     [Password], [ImageName], [lAppUserId], [lReferenceTypeId], [ReferenceName], [IsActive])
+     [ImageName], [lAppUserId], [lReferenceTypeId], [ReferenceName], [IsActive])
 OUTPUT INSERTED.[lPatientDataId]
 VALUES
     (@firstName, @lastName, @mobileNo, @email, @address, @gender, @city, @birthDate, @createdDate,
-     @password, @imageName, @appUserId, @referenceTypeId, @referenceName, @isActive)";
+     @imageName, @appUserId, @referenceTypeId, @referenceName, @isActive)";
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@firstName", request.FirstName);
@@ -49,7 +46,6 @@ VALUES
         command.Parameters.AddWithValue("@city", request.City);
         command.Parameters.AddWithValue("@birthDate", request.BirthDate.ToDateTime(TimeOnly.MinValue));
         command.Parameters.AddWithValue("@createdDate", DateTime.UtcNow.Date);
-        command.Parameters.AddWithValue("@password", _passwordCryptoService.Encrypt(request.Password));
         command.Parameters.AddWithValue("@imageName", (object?)imageName ?? DBNull.Value);
         command.Parameters.AddWithValue("@appUserId", request.AppUserId);
         command.Parameters.AddWithValue("@referenceTypeId", request.ReferenceTypeId);

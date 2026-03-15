@@ -15,6 +15,7 @@ class AppointmentsPage extends StatefulWidget {
 }
 
 class _AppointmentsPageState extends State<AppointmentsPage> {
+  static const int _appointmentDurationMinutes = 15;
   final _repo = AppointmentRepository();
 
   List<LookupOptionModel> _statusOptions = const [];
@@ -193,9 +194,11 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
 
     final slots = <DateTime>[];
     var current = window.open!;
-    while (!current.add(const Duration(minutes: 30)).isAfter(window.close!)) {
+    while (!current
+        .add(const Duration(minutes: _appointmentDurationMinutes))
+        .isAfter(window.close!)) {
       slots.add(current);
-      current = current.add(const Duration(minutes: 30));
+      current = current.add(const Duration(minutes: _appointmentDurationMinutes));
     }
     return slots;
   }
@@ -225,7 +228,9 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
     var free = 0;
 
     for (final slotStart in slots) {
-      final slotEnd = slotStart.add(const Duration(minutes: 30));
+      final slotEnd = slotStart.add(
+        const Duration(minutes: _appointmentDurationMinutes),
+      );
       final isPast = slotEnd.isBefore(now);
       final isBooked = _hasOverlap(slotStart, slotEnd, appointments);
       if (!isPast && !isBooked) {
@@ -279,7 +284,9 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
     final slots = <_AvailabilitySlot>[];
 
     for (final slotStart in _timeSlotsForDay(_selectedDate)) {
-      final slotEnd = slotStart.add(const Duration(minutes: 30));
+      final slotEnd = slotStart.add(
+        const Duration(minutes: _appointmentDurationMinutes),
+      );
       final isPast = slotEnd.isBefore(now);
       final isBooked = _hasOverlap(slotStart, slotEnd, appointments);
       final label = '${_fmtTime(slotStart)} - ${_fmtTime(slotEnd)}';
@@ -491,7 +498,7 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Appointments on ${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}',
+                    'Appointments on ${_fmtShortDate(_selectedDate)}',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
@@ -710,24 +717,28 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
         : existing?.appointmentTypeId ?? 0;
     var notified = (existing?.isNotified ?? 0) == 1;
 
-    var startDateTime =
-        existing?.startTime ??
-        DateTime(
-          _selectedDate.year,
-          _selectedDate.month,
-          _selectedDate.day,
-          10,
-          0,
-        );
-    var endDateTime =
-        existing?.endTime ??
-        DateTime(
-          _selectedDate.year,
-          _selectedDate.month,
-          _selectedDate.day,
-          10,
-          30,
-        );
+    var startDateTime = existing?.startTime ?? _defaultStartTimeForSelectedDate();
+    var endDateTime = startDateTime.add(
+      const Duration(minutes: _appointmentDurationMinutes),
+    );
+    final availableStartTimes = _availableStartTimesForSelectedDay(
+      existingAppointmentId: existing?.patientAppointmentId,
+      existingStartTime: existing?.startTime,
+    );
+    final startTimeController = TextEditingController(
+      text: _fmtTime(startDateTime),
+    );
+    if (availableStartTimes.isEmpty && existing == null) {
+      _showError('No available appointment times for the selected date.');
+      return;
+    }
+    if (availableStartTimes.isNotEmpty &&
+        !availableStartTimes.any((slot) => slot == startDateTime)) {
+      startDateTime = availableStartTimes.first;
+      endDateTime = startDateTime.add(
+        const Duration(minutes: _appointmentDurationMinutes),
+      );
+    }
 
     await showDialog<void>(
       context: context,
@@ -808,18 +819,24 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                                     .colorScheme
                                     .surfaceContainerHighest
                                     .withValues(alpha: 0.35),
-                                title: const Text('Start Time'),
-                                subtitle: Text(_fmtDateTime(startDateTime)),
-                                trailing: const Icon(Icons.schedule),
-                                onTap: () async {
-                                  final picked = await _pickDateTime(
-                                    ctx,
-                                    startDateTime,
-                                  );
-                                  if (picked != null) {
-                                    setLocalState(() => startDateTime = picked);
-                                  }
-                                },
+                                title: const Text('Appointment Date'),
+                                subtitle: Text(_fmtShortDate(_selectedDate)),
+                                trailing: const Icon(Icons.calendar_today),
+                              ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: startTimeController,
+                                keyboardType: TextInputType.datetime,
+                                decoration: InputDecoration(
+                                  labelText: 'Start Time',
+                                  hintText: 'HH:mm',
+                                  helperText: availableStartTimes.isEmpty
+                                      ? 'No available slots'
+                                      : 'Available: ${availableStartTimes.map(_fmtTime).join(', ')}',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
                               ),
                               const SizedBox(height: 8),
                               ListTile(
@@ -833,15 +850,6 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                                 title: const Text('End Time'),
                                 subtitle: Text(_fmtDateTime(endDateTime)),
                                 trailing: const Icon(Icons.schedule),
-                                onTap: () async {
-                                  final picked = await _pickDateTime(
-                                    ctx,
-                                    endDateTime,
-                                  );
-                                  if (picked != null) {
-                                    setLocalState(() => endDateTime = picked);
-                                  }
-                                },
                               ),
                             ],
                           ),
@@ -858,9 +866,26 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                           const SizedBox(width: 8),
                           FilledButton(
                             onPressed: () async {
-                              if (!endDateTime.isAfter(startDateTime)) {
+                              final parsedStartTime = _parseSelectedTime(
+                                startTimeController.text,
+                              );
+                              if (parsedStartTime == null) {
                                 _showError(
-                                  'End time must be after start time.',
+                                  'Enter start time in HH:mm format.',
+                                );
+                                return;
+                              }
+                              startDateTime = parsedStartTime;
+                              endDateTime = startDateTime.add(
+                                const Duration(
+                                  minutes: _appointmentDurationMinutes,
+                                ),
+                              );
+                              final matchesAvailableSlot = availableStartTimes
+                                  .any((slot) => slot == startDateTime);
+                              if (!matchesAvailableSlot) {
+                                _showError(
+                                  'Entered time is not available for the selected date.',
                                 );
                                 return;
                               }
@@ -888,12 +913,8 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                                     'patientDataId': selectedPatientId,
                                     'doctorProfileId': selectedDoctorId,
                                     'clinicId': clinicId,
-                                    'startTime': startDateTime
-                                        .toUtc()
-                                        .toIso8601String(),
-                                    'endTime': endDateTime
-                                        .toUtc()
-                                        .toIso8601String(),
+                                    'startTime': startDateTime.toIso8601String(),
+                                    'endTime': endDateTime.toIso8601String(),
                                     'appointmentStatusId': selectedStatusId,
                                     if (selectedTypeId > 0)
                                       'appointmentTypeId': selectedTypeId,
@@ -983,36 +1004,49 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
     );
   }
 
-  Future<DateTime?> _pickDateTime(
-    BuildContext context,
-    DateTime initial,
-  ) async {
-    final pickedDate = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime(2020, 1, 1),
-      lastDate: DateTime(2100, 12, 31),
-    );
-    if (pickedDate == null) {
-      return null;
-    }
-    if (!context.mounted) {
-      return null;
-    }
-    final pickedTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(initial),
-    );
-    if (pickedTime == null) {
-      return null;
+  DateTime _defaultStartTimeForSelectedDate() {
+    final available = _availableStartTimesForSelectedDay();
+    if (available.isNotEmpty) {
+      return available.first;
     }
     return DateTime(
-      pickedDate.year,
-      pickedDate.month,
-      pickedDate.day,
-      pickedTime.hour,
-      pickedTime.minute,
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      10,
+      0,
     );
+  }
+
+  List<DateTime> _availableStartTimesForSelectedDay({
+    int? existingAppointmentId,
+    DateTime? existingStartTime,
+  }) {
+    final now = DateTime.now();
+    final dayAppointments = _appointmentsForDay(_selectedDate)
+        .where((appointment) =>
+            existingAppointmentId == null ||
+            appointment.patientAppointmentId != existingAppointmentId)
+        .toList();
+
+    final available = _timeSlotsForDay(_selectedDate).where((slotStart) {
+      final slotEnd = slotStart.add(
+        const Duration(minutes: _appointmentDurationMinutes),
+      );
+      if (slotEnd.isBefore(now)) {
+        return false;
+      }
+      return !_hasOverlap(slotStart, slotEnd, dayAppointments);
+    }).toList();
+
+    if (existingStartTime != null &&
+        _isSameDate(existingStartTime, _selectedDate) &&
+        !available.any((slot) => slot == existingStartTime)) {
+      available.add(existingStartTime);
+      available.sort();
+    }
+
+    return available;
   }
 
   bool _isSameDate(DateTime a, DateTime b) =>
@@ -1047,8 +1081,53 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
   String _fmtTime(DateTime value) =>
       '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
 
+  String _fmtShortDate(DateTime value) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final month = months[value.month - 1];
+    final year = (value.year % 100).toString().padLeft(2, '0');
+    return '${value.day.toString().padLeft(2, '0')}-$month-$year';
+  }
+
   String _fmtDateTime(DateTime value) =>
-      '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')} ${_fmtTime(value)}';
+      '${_fmtShortDate(value)} ${_fmtTime(value)}';
+
+  DateTime? _parseSelectedTime(String raw) {
+    final clean = raw.trim();
+    final match = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(clean);
+    if (match == null) {
+      return null;
+    }
+
+    final hour = int.tryParse(match.group(1)!);
+    final minute = int.tryParse(match.group(2)!);
+    if (hour == null || minute == null) {
+      return null;
+    }
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return null;
+    }
+
+    return DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      hour,
+      minute,
+    );
+  }
 
   void _showError(String raw) {
     final message = raw.replaceFirst('Exception: ', '');

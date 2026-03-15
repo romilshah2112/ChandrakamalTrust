@@ -8,12 +8,10 @@ class PatientCreateRequestModel {
     required this.gender,
     required this.city,
     required this.birthDate,
-    required this.password,
     required this.imageName,
     required this.imageBase64,
     required this.imageFileName,
     required this.imageContentType,
-    required this.appUserId,
     required this.referenceTypeId,
     required this.referenceName,
   });
@@ -26,12 +24,10 @@ class PatientCreateRequestModel {
   final String gender;
   final String city;
   final String birthDate;
-  final String password;
   final String? imageName;
   final String? imageBase64;
   final String? imageFileName;
   final String? imageContentType;
-  final int appUserId;
   final int referenceTypeId;
   final String referenceName;
 
@@ -45,12 +41,10 @@ class PatientCreateRequestModel {
       'gender': gender,
       'city': city,
       'birthDate': birthDate,
-      'password': password,
       'imageName': imageName,
       'imageBase64': imageBase64,
       'imageFileName': imageFileName,
       'imageContentType': imageContentType,
-      'appUserId': appUserId,
       'referenceTypeId': referenceTypeId,
       'referenceName': referenceName,
     };

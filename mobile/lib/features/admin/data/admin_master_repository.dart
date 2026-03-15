@@ -2,6 +2,7 @@ import 'package:optima_healthcare_mobile/core/network/api_client.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/clinic_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/clinic_schedule_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/doctor_profile_model.dart';
+import 'package:optima_healthcare_mobile/features/admin/models/invoice_type_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/staff_model.dart';
 
 class AdminMasterRepository {
@@ -43,4 +44,14 @@ class AdminMasterRepository {
   }) => _apiClient.saveClinicSchedule(accessToken: token, body: body, id: id);
   Future<void> deleteClinicSchedule(String token, int id) =>
       _apiClient.deleteClinicSchedule(accessToken: token, id: id);
+
+  Future<List<InvoiceTypeModel>> listInvoiceTypes(String token) =>
+      _apiClient.listInvoiceTypes(accessToken: token);
+  Future<void> saveInvoiceType(
+    String token,
+    Map<String, dynamic> body, {
+    int? id,
+  }) => _apiClient.saveInvoiceType(accessToken: token, body: body, id: id);
+  Future<void> deleteInvoiceType(String token, int id) =>
+      _apiClient.deleteInvoiceType(accessToken: token, id: id);
 }

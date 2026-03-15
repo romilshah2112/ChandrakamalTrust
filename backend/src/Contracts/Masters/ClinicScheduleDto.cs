@@ -9,4 +9,5 @@ public sealed class ClinicScheduleDto
     public string? CloseTime { get; init; }
     public bool IsClosed { get; init; }
     public int AppUserId { get; init; }
+    public string AppUserName { get; init; } = string.Empty;
 }

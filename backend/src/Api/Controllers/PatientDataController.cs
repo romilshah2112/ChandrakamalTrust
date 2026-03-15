@@ -1,6 +1,6 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OptimaHealthcare.Api.Security;
 using OptimaHealthcare.Application.Abstractions;
 using OptimaHealthcare.Contracts.Patients;
 
@@ -11,6 +11,7 @@ namespace OptimaHealthcare.Api.Controllers;
 [Route("api/v1/patient-data")]
 public sealed class PatientDataController : ControllerBase
 {
+    private static readonly string[] AllowedRoles = ["admin", "doctor", "receptionist"];
     private readonly IPatientDataService _patientDataService;
 
     public PatientDataController(IPatientDataService patientDataService)
@@ -19,16 +20,20 @@ public sealed class PatientDataController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin,Doctor,Receptionist")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> Create([FromBody] PatientDataCreateRequest request, CancellationToken cancellationToken)
     {
+        if (!CanManagePatients())
+        {
+            return Forbid();
+        }
+
+        request.AppUserId = 0;
+
         if (string.IsNullOrWhiteSpace(request.FirstName)
             || string.IsNullOrWhiteSpace(request.LastName)
             || string.IsNullOrWhiteSpace(request.Email)
-            || string.IsNullOrWhiteSpace(request.Password)
-            || request.AppUserId <= 0
             || request.ReferenceTypeId <= 0
             || request.MobileNo <= 0)
         {
@@ -52,37 +57,19 @@ public sealed class PatientDataController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<PatientDataResponse>> GetMyPatientRecord(CancellationToken cancellationToken)
     {
-        var appUserId = ResolveAppUserId(User);
-        if (appUserId is null or <= 0)
+        var appUserId = User.GetAppUserId();
+        if (appUserId <= 0)
         {
             return Unauthorized();
         }
 
-        var patient = await _patientDataService.GetByAppUserIdAsync(appUserId.Value, cancellationToken);
+        var patient = await _patientDataService.GetByAppUserIdAsync(appUserId, cancellationToken);
         if (patient is null)
         {
             return NotFound();
         }
 
         return Ok(patient);
-    }
-
-    private static int? ResolveAppUserId(ClaimsPrincipal user)
-    {
-        var claimTypes = new[]
-        {
-            ClaimTypes.NameIdentifier,
-            "app_user_id",
-            "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
-            "sub"
-        };
-        foreach (var claimType in claimTypes)
-        {
-            var value = user.FindFirstValue(claimType);
-            if (!string.IsNullOrEmpty(value) && int.TryParse(value, out var id) && id > 0)
-                return id;
-        }
-        return null;
     }
 
     /// <summary>Updates contact details for the patient record where PatientData.lAppUserId equals the logged-in user's app user id.</summary>
@@ -93,8 +80,8 @@ public sealed class PatientDataController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateMyContact([FromBody] PatientContactUpdateRequest request, CancellationToken cancellationToken)
     {
-        var appUserId = ResolveAppUserId(User);
-        if (appUserId is null or <= 0)
+        var appUserId = User.GetAppUserId();
+        if (appUserId <= 0)
         {
             return Unauthorized();
         }
@@ -104,7 +91,7 @@ public sealed class PatientDataController : ControllerBase
             return BadRequest("Email is required.");
         }
 
-        var updated = await _patientDataService.UpdateMyContactAsync(appUserId.Value, request, cancellationToken);
+        var updated = await _patientDataService.UpdateMyContactAsync(appUserId, request, cancellationToken);
         if (!updated)
         {
             return NotFound("Patient record not found.");
@@ -114,11 +101,15 @@ public sealed class PatientDataController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "Admin,Doctor,Receptionist")]
     [ProducesResponseType(typeof(PatientDataResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<PatientDataResponse>> GetById(int id, CancellationToken cancellationToken)
     {
+        if (!CanManagePatients())
+        {
+            return Forbid();
+        }
+
         var patient = await _patientDataService.GetByIdAsync(id, cancellationToken);
         if (patient is null)
         {
@@ -129,12 +120,16 @@ public sealed class PatientDataController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "Admin,Doctor,Receptionist")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(int id, [FromBody] PatientDataUpdateRequest request, CancellationToken cancellationToken)
     {
+        if (!CanManagePatients())
+        {
+            return Forbid();
+        }
+
         if (string.IsNullOrWhiteSpace(request.FirstName) || string.IsNullOrWhiteSpace(request.LastName) || string.IsNullOrWhiteSpace(request.Email))
         {
             return BadRequest("FirstName, LastName and Email are required.");
@@ -156,12 +151,16 @@ public sealed class PatientDataController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "Admin,Doctor,Receptionist")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
+        if (!CanManagePatients())
+        {
+            return Forbid();
+        }
+
         var (deleted, blockReason) = await _patientDataService.TryDeleteAsync(id, cancellationToken);
         if (!string.IsNullOrEmpty(blockReason))
         {
@@ -177,11 +176,22 @@ public sealed class PatientDataController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "Admin,Doctor,Receptionist")]
     [ProducesResponseType(typeof(IReadOnlyList<PatientListItemResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<PatientListItemResponse>>> List([FromQuery] string? query, CancellationToken cancellationToken)
     {
+        if (!CanManagePatients())
+        {
+            return Forbid();
+        }
+
         var list = await _patientDataService.ListAsync(query, cancellationToken);
         return Ok(list);
+    }
+
+    private bool CanManagePatients()
+    {
+        var role = User.GetRoleName();
+        return AllowedRoles.Any(allowedRole =>
+            role.Contains(allowedRole, StringComparison.OrdinalIgnoreCase));
     }
 }

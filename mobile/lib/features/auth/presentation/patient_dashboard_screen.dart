@@ -180,12 +180,12 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
           NavigationDestination(
             icon: Icon(Icons.calendar_today_outlined),
             selectedIcon: Icon(Icons.calendar_today),
-            label: 'Appointments',
+            label: 'Schedule',
           ),
           NavigationDestination(
             icon: Icon(Icons.favorite_border),
             selectedIcon: Icon(Icons.favorite),
-            label: 'My Details',
+            label: 'Details',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

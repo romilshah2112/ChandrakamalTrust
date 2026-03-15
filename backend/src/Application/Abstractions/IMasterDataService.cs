@@ -25,4 +25,9 @@ public interface IMasterDataService
     Task<int> CreateClinicScheduleAsync(SaveClinicScheduleRequest request, CancellationToken cancellationToken);
     Task UpdateClinicScheduleAsync(int scheduleId, SaveClinicScheduleRequest request, CancellationToken cancellationToken);
     Task DeleteClinicScheduleAsync(int scheduleId, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<InvoiceTypeDto>> ListInvoiceTypesAsync(CancellationToken cancellationToken);
+    Task<int> CreateInvoiceTypeAsync(SaveInvoiceTypeRequest request, CancellationToken cancellationToken);
+    Task UpdateInvoiceTypeAsync(int invoiceTypeId, SaveInvoiceTypeRequest request, CancellationToken cancellationToken);
+    Task DeleteInvoiceTypeAsync(int invoiceTypeId, CancellationToken cancellationToken);
 }

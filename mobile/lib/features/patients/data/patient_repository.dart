@@ -1,4 +1,5 @@
 import 'package:optima_healthcare_mobile/core/network/api_client.dart';
+import 'package:optima_healthcare_mobile/features/appointments/models/lookup_option_model.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_contact_update_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_create_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_data_update_request.dart';
@@ -15,6 +16,12 @@ class PatientRepository {
     required PatientCreateRequestModel request,
   }) {
     return _apiClient.createPatient(accessToken: accessToken, request: request);
+  }
+
+  Future<List<LookupOptionModel>> getReferenceTypes({
+    required String accessToken,
+  }) {
+    return _apiClient.getReferenceTypes(accessToken: accessToken);
   }
 
   Future<PatientDetailModel> getMyPatientDetails({required String accessToken}) {

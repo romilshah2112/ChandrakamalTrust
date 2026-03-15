@@ -93,13 +93,15 @@ class AppTheme {
             return const TextStyle(
               color: brandRed,
               fontWeight: FontWeight.w600,
-              fontSize: 12,
+              fontSize: 11,
+              height: 1.0,
             );
           }
           return const TextStyle(
             color: brandCharcoal,
             fontWeight: FontWeight.w500,
-            fontSize: 12,
+            fontSize: 11,
+            height: 1.0,
           );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {

@@ -310,7 +310,7 @@ class _LoginScreenState extends State<LoginScreen> {
           const Center(child: BrandLogo(height: 54)),
           const SizedBox(height: 8),
           Text(
-            'Create AppUser',
+            'New User Sign up',
             style: Theme.of(context).textTheme.headlineSmall,
             textAlign: TextAlign.center,
           ),

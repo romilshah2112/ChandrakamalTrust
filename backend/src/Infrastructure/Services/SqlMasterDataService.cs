@@ -7,6 +7,13 @@ namespace OptimaHealthcare.Infrastructure.Services;
 
 public sealed class SqlMasterDataService : IMasterDataService
 {
+    private static readonly string[] InvoiceTypeIdCandidates = ["lInvoiceTypeId", "InvoiceTypeId", "Id"];
+    private static readonly string[] InvoiceTypeNameCandidates = ["InvoiceTypeName", "InvType", "InvoiceType", "TypeName", "Name"];
+    private static readonly string[] DescriptionCandidates = ["Description", "Details", "Remarks"];
+    private static readonly string[] ChargesCandidates = ["Charges", "Charge", "Amount", "Price"];
+    private static readonly string[] IsActiveCandidates = ["IsActive", "Active", "IsEnabled"];
+    private static readonly string[] InsertedOnCandidates = ["InsertedOn", "CreatedDate", "CreatedOn"];
+    private static readonly string[] UpdatedOnCandidates = ["UpdatedOn", "ModifiedOn", "UpdatedDate"];
     private readonly string _connectionString;
 
     public SqlMasterDataService(IConfiguration configuration)
@@ -252,7 +259,25 @@ WHERE [lClinicId] = @id AND ([IsActive] = 1 OR [IsActive] = 'true')";
 
     public async Task<IReadOnlyList<ClinicScheduleDto>> ListClinicSchedulesAsync(CancellationToken cancellationToken)
     {
-        const string sql = @"SELECT [lScheduleId],[lClinicId],[DayOfWeek],[OpenTime],[CloseTime],[IsClosed],[lAppUserId] FROM [ClinicSchedule] ORDER BY [lClinicId],[DayOfWeek],[lScheduleId]";
+        const string sql = @"
+SELECT
+    cs.[lScheduleId],
+    cs.[lClinicId],
+    cs.[DayOfWeek],
+    cs.[OpenTime],
+    cs.[CloseTime],
+    cs.[IsClosed],
+    cs.[lAppUserId],
+    LTRIM(RTRIM(
+        COALESCE(au.[FirstName], '') +
+        CASE
+            WHEN au.[LastName] IS NULL OR au.[LastName] = '' THEN ''
+            ELSE ' ' + au.[LastName]
+        END
+    )) AS [AppUserName]
+FROM [ClinicSchedule] cs
+LEFT JOIN [AppUser] au ON au.[lAppUserId] = cs.[lAppUserId]
+ORDER BY cs.[lClinicId],cs.[DayOfWeek],cs.[lScheduleId]";
         await using var con = new SqlConnection(_connectionString);
         await con.OpenAsync(cancellationToken);
         await using var cmd = new SqlCommand(sql, con);
@@ -268,7 +293,8 @@ WHERE [lClinicId] = @id AND ([IsActive] = 1 OR [IsActive] = 'true')";
                 OpenTime = SafeTimeString(reader["OpenTime"]),
                 CloseTime = SafeTimeString(reader["CloseTime"]),
                 IsClosed = SafeBool(reader["IsClosed"]),
-                AppUserId = SafeInt(reader["lAppUserId"])
+                AppUserId = SafeInt(reader["lAppUserId"]),
+                AppUserName = reader["AppUserName"]?.ToString() ?? string.Empty
             });
         }
         return list;
@@ -310,6 +336,199 @@ WHERE [lClinicId] = @id AND ([IsActive] = 1 OR [IsActive] = 'true')";
         catch (SqlException ex) when (ex.Number == 547)
         {
             throw new InvalidOperationException("Cannot delete clinic schedule because linked records exist.", ex);
+        }
+    }
+
+    public async Task<IReadOnlyList<InvoiceTypeDto>> ListInvoiceTypesAsync(CancellationToken cancellationToken)
+    {
+        await using var con = new SqlConnection(_connectionString);
+        await con.OpenAsync(cancellationToken);
+
+        var columns = await GetColumnsAsync(con, "InvoiceType", cancellationToken);
+        var idColumn = ResolveFirst(columns, InvoiceTypeIdCandidates)
+            ?? throw new InvalidOperationException("InvoiceType id column not found.");
+        var nameColumn = ResolveFirst(columns, InvoiceTypeNameCandidates)
+            ?? throw new InvalidOperationException("InvoiceType name column not found.");
+        var descriptionColumn = ResolveFirst(columns, DescriptionCandidates);
+        var chargesColumn = ResolveFirst(columns, ChargesCandidates);
+        var isActiveColumn = ResolveFirst(columns, IsActiveCandidates);
+
+        var sql = $@"
+SELECT
+    CAST([{idColumn}] AS int) AS [InvoiceTypeId],
+    CAST([{nameColumn}] AS nvarchar(200)) AS [InvoiceTypeName],
+    {(descriptionColumn is null ? "CAST('' AS nvarchar(500))" : $"ISNULL(CAST([{descriptionColumn}] AS nvarchar(500)), '')")} AS [Description],
+    {(chargesColumn is null ? "CAST(0 AS float)" : $"CAST(ISNULL([{chargesColumn}], 0) AS float)")} AS [Charges],
+    {(isActiveColumn is null
+        ? "CAST(1 AS bit)"
+        : $@"CASE
+    WHEN [{isActiveColumn}] IS NULL THEN CAST(1 AS bit)
+    WHEN TRY_CONVERT(int, [{isActiveColumn}]) IS NOT NULL
+        THEN CASE WHEN TRY_CONVERT(int, [{isActiveColumn}]) = 0 THEN CAST(0 AS bit) ELSE CAST(1 AS bit) END
+    WHEN LOWER(LTRIM(RTRIM(CAST([{isActiveColumn}] AS nvarchar(20))))) IN ('true', 'yes', 'y', 'active')
+        THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END")} AS [IsActive]
+FROM [InvoiceType]
+ORDER BY [{nameColumn}]";
+
+        await using var cmd = new SqlCommand(sql, con);
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        var list = new List<InvoiceTypeDto>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            list.Add(new InvoiceTypeDto
+            {
+                InvoiceTypeId = SafeInt(reader["InvoiceTypeId"]),
+                InvoiceTypeName = reader["InvoiceTypeName"]?.ToString() ?? string.Empty,
+                Description = reader["Description"]?.ToString() ?? string.Empty,
+                Charges = SafeDouble(reader["Charges"]),
+                IsActive = SafeBool(reader["IsActive"])
+            });
+        }
+
+        return list;
+    }
+
+    public async Task<int> CreateInvoiceTypeAsync(SaveInvoiceTypeRequest request, CancellationToken cancellationToken)
+    {
+        await using var con = new SqlConnection(_connectionString);
+        await con.OpenAsync(cancellationToken);
+
+        var columns = await GetColumnsAsync(con, "InvoiceType", cancellationToken);
+        var idColumn = ResolveFirst(columns, InvoiceTypeIdCandidates)
+            ?? throw new InvalidOperationException("InvoiceType id column not found.");
+        var nameColumn = ResolveFirst(columns, InvoiceTypeNameCandidates)
+            ?? throw new InvalidOperationException("InvoiceType name column not found.");
+        var descriptionColumn = ResolveFirst(columns, DescriptionCandidates);
+        var chargesColumn = ResolveFirst(columns, ChargesCandidates);
+        var isActiveColumn = ResolveFirst(columns, IsActiveCandidates);
+        var insertedOnColumn = ResolveFirst(columns, InsertedOnCandidates);
+        var updatedOnColumn = ResolveFirst(columns, UpdatedOnCandidates);
+
+        var insertColumns = new List<string> {$"[{nameColumn}]"};
+        var insertValues = new List<string> {"@name"};
+
+        if (descriptionColumn is not null)
+        {
+            insertColumns.Add($"[{descriptionColumn}]");
+            insertValues.Add("@description");
+        }
+        if (chargesColumn is not null)
+        {
+            insertColumns.Add($"[{chargesColumn}]");
+            insertValues.Add("@charges");
+        }
+        if (isActiveColumn is not null)
+        {
+            insertColumns.Add($"[{isActiveColumn}]");
+            insertValues.Add("@isActive");
+        }
+        if (insertedOnColumn is not null)
+        {
+            insertColumns.Add($"[{insertedOnColumn}]");
+            insertValues.Add("@insertedOn");
+        }
+        if (updatedOnColumn is not null)
+        {
+            insertColumns.Add($"[{updatedOnColumn}]");
+            insertValues.Add("@updatedOn");
+        }
+
+        var sql = $@"
+INSERT INTO [InvoiceType]({string.Join(",", insertColumns)})
+OUTPUT INSERTED.[{idColumn}]
+VALUES({string.Join(",", insertValues)})";
+
+        await using var cmd = new SqlCommand(sql, con);
+        BindInvoiceType(
+            cmd,
+            request,
+            includeInsertedOn: insertedOnColumn is not null,
+            includeUpdatedOn: updatedOnColumn is not null,
+            includeIsActive: isActiveColumn is not null,
+            includeDescription: descriptionColumn is not null,
+            includeCharges: chargesColumn is not null);
+        var id = await cmd.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(id);
+    }
+
+    public async Task UpdateInvoiceTypeAsync(int invoiceTypeId, SaveInvoiceTypeRequest request, CancellationToken cancellationToken)
+    {
+        await using var con = new SqlConnection(_connectionString);
+        await con.OpenAsync(cancellationToken);
+
+        var columns = await GetColumnsAsync(con, "InvoiceType", cancellationToken);
+        var idColumn = ResolveFirst(columns, InvoiceTypeIdCandidates)
+            ?? throw new InvalidOperationException("InvoiceType id column not found.");
+        var nameColumn = ResolveFirst(columns, InvoiceTypeNameCandidates)
+            ?? throw new InvalidOperationException("InvoiceType name column not found.");
+        var descriptionColumn = ResolveFirst(columns, DescriptionCandidates);
+        var chargesColumn = ResolveFirst(columns, ChargesCandidates);
+        var isActiveColumn = ResolveFirst(columns, IsActiveCandidates);
+        var updatedOnColumn = ResolveFirst(columns, UpdatedOnCandidates);
+
+        var sets = new List<string> {$"[{nameColumn}] = @name"};
+        if (descriptionColumn is not null)
+        {
+            sets.Add($"[{descriptionColumn}] = @description");
+        }
+        if (chargesColumn is not null)
+        {
+            sets.Add($"[{chargesColumn}] = @charges");
+        }
+        if (isActiveColumn is not null)
+        {
+            sets.Add($"[{isActiveColumn}] = @isActive");
+        }
+        if (updatedOnColumn is not null)
+        {
+            sets.Add($"[{updatedOnColumn}] = @updatedOn");
+        }
+
+        var sql = $@"UPDATE [InvoiceType] SET {string.Join(",", sets)} WHERE [{idColumn}] = @id";
+        await using var cmd = new SqlCommand(sql, con);
+        BindInvoiceType(
+            cmd,
+            request,
+            includeInsertedOn: false,
+            includeUpdatedOn: updatedOnColumn is not null,
+            includeIsActive: isActiveColumn is not null,
+            includeDescription: descriptionColumn is not null,
+            includeCharges: chargesColumn is not null);
+        cmd.Parameters.AddWithValue("@id", invoiceTypeId);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task DeleteInvoiceTypeAsync(int invoiceTypeId, CancellationToken cancellationToken)
+    {
+        await using var con = new SqlConnection(_connectionString);
+        await con.OpenAsync(cancellationToken);
+
+        var columns = await GetColumnsAsync(con, "InvoiceType", cancellationToken);
+        var idColumn = ResolveFirst(columns, InvoiceTypeIdCandidates)
+            ?? throw new InvalidOperationException("InvoiceType id column not found.");
+        var isActiveColumn = ResolveFirst(columns, IsActiveCandidates);
+        var updatedOnColumn = ResolveFirst(columns, UpdatedOnCandidates);
+
+        var sql = isActiveColumn is not null
+            ? $@"UPDATE [InvoiceType] SET [{isActiveColumn}] = 0{(updatedOnColumn is not null ? $", [{updatedOnColumn}] = @updatedOn" : string.Empty)} WHERE [{idColumn}] = @id"
+            : $@"DELETE FROM [InvoiceType] WHERE [{idColumn}] = @id";
+
+        await using var cmd = new SqlCommand(sql, con);
+        if (updatedOnColumn is not null && isActiveColumn is not null)
+        {
+            cmd.Parameters.AddWithValue("@updatedOn", DateTime.UtcNow);
+        }
+        cmd.Parameters.AddWithValue("@id", invoiceTypeId);
+
+        try
+        {
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (SqlException ex) when (ex.Number == 547)
+        {
+            throw new InvalidOperationException("Cannot delete invoice type because linked records exist.", ex);
         }
     }
 
@@ -371,7 +590,66 @@ WHERE [lClinicId] = @id AND ([IsActive] = 1 OR [IsActive] = 'true')";
         }
     }
 
+    private static void BindInvoiceType(
+        SqlCommand cmd,
+        SaveInvoiceTypeRequest request,
+        bool includeInsertedOn,
+        bool includeUpdatedOn,
+        bool includeIsActive,
+        bool includeDescription,
+        bool includeCharges)
+    {
+        cmd.Parameters.AddWithValue("@name", request.InvoiceTypeName);
+        if (includeDescription)
+        {
+            cmd.Parameters.AddWithValue("@description", (object?)request.Description ?? DBNull.Value);
+        }
+        if (includeCharges)
+        {
+            cmd.Parameters.AddWithValue("@charges", request.Charges);
+        }
+        if (includeIsActive)
+        {
+            cmd.Parameters.AddWithValue("@isActive", request.IsActive);
+        }
+        if (includeInsertedOn)
+        {
+            cmd.Parameters.AddWithValue("@insertedOn", DateTime.UtcNow);
+        }
+        if (includeUpdatedOn)
+        {
+            cmd.Parameters.AddWithValue("@updatedOn", DateTime.UtcNow);
+        }
+    }
+
+    private static string? ResolveFirst(HashSet<string> columns, IReadOnlyList<string> candidates)
+        => candidates.FirstOrDefault(columns.Contains);
+
+    private static async Task<HashSet<string>> GetColumnsAsync(
+        SqlConnection connection,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        const string sql = @"
+SELECT COLUMN_NAME
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = @tableName";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@tableName", tableName);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(reader.GetString(0));
+        }
+
+        return result;
+    }
+
     private static int SafeInt(object value) => value is DBNull ? 0 : Convert.ToInt32(value);
+    private static double SafeDouble(object value) => value is DBNull ? 0d : Convert.ToDouble(value);
     private static long SafeLong(object value) => value is DBNull ? 0L : Convert.ToInt64(value);
     private static string? SafeTimeString(object value)
     {

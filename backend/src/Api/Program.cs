@@ -30,8 +30,11 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddScoped<IPatientReadService, InMemoryPatientReadService>();
 builder.Services.AddScoped<IPatientDataService, SqlPatientDataService>();
+builder.Services.AddScoped<IReferenceTypeService, SqlReferenceTypeService>();
 builder.Services.AddScoped<IImageStorageService, CloudinaryImageStorageService>();
 builder.Services.AddScoped<IPatientAppointmentService, SqlPatientAppointmentService>();
+builder.Services.AddScoped<IInvoiceService, SqlInvoiceService>();
+builder.Services.AddScoped<IDoctorAnalyticsService, SqlDoctorAnalyticsService>();
 builder.Services.AddScoped<IMasterDataService, SqlMasterDataService>();
 builder.Services.AddScoped<IUserAuthService, SqlAppUserAuthService>();
 builder.Services.AddScoped<IPasswordCryptoService, LegacyPasswordCryptoService>();
@@ -66,6 +69,8 @@ builder.Services
             ValidateAudience = true,
             ValidateIssuerSigningKey = true,
             ValidateLifetime = true,
+            NameClaimType = "unique_name",
+            RoleClaimType = "role",
             ValidIssuer = issuer,
             ValidAudience = audience,
             IssuerSigningKey = signingKey,

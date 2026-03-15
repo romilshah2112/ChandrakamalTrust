@@ -104,6 +104,10 @@ public sealed class AuthController : ControllerBase
                 Message = "User created successfully."
             });
         }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
         catch (InvalidOperationException ex)
         {
             return Conflict(ex.Message);
