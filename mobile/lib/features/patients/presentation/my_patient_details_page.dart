@@ -4,6 +4,7 @@ import 'package:optima_healthcare_mobile/features/auth/models/auth_session.dart'
 import 'package:optima_healthcare_mobile/features/patients/data/patient_repository.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_contact_update_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_detail.dart';
+import 'package:optima_healthcare_mobile/features/patients/presentation/patient_vitals_page.dart';
 
 class MyPatientDetailsPage extends StatefulWidget {
   const MyPatientDetailsPage({super.key});
@@ -13,6 +14,21 @@ class MyPatientDetailsPage extends StatefulWidget {
 }
 
 class _MyPatientDetailsPageState extends State<MyPatientDetailsPage> {
+  static const List<String> _monthNames = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
   final _repo = PatientRepository();
   bool _loading = true;
   String? _error;
@@ -173,6 +189,21 @@ class _MyPatientDetailsPageState extends State<MyPatientDetailsPage> {
     if (saved == true && mounted) _load();
   }
 
+  Future<void> _openVitals() async {
+    if (_patient == null) {
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => PatientVitalsPage(
+          patientDataId: _patient!.patientDataId,
+          patientName: '${_patient!.firstName} ${_patient!.lastName}'.trim(),
+        ),
+      ),
+    );
+  }
+
   String? _normalizeRemoteImageUrl(String? value) {
     final trimmed = value?.trim();
     if (trimmed == null || trimmed.isEmpty) {
@@ -206,18 +237,36 @@ class _MyPatientDetailsPageState extends State<MyPatientDetailsPage> {
     );
   }
 
+  String _formatDate(String raw) {
+    final parsed = DateTime.tryParse(raw.trim());
+    if (parsed == null) {
+      return raw;
+    }
+
+    final day = parsed.day.toString().padLeft(2, '0');
+    final month = _monthNames[parsed.month - 1];
+    final year = (parsed.year % 100).toString().padLeft(2, '0');
+    return '$day-$month-$year';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Patient Profile'),
+        title: const Text('My Details'),
         actions: [
-          if (_patient != null)
+          if (_patient != null) ...[
+            IconButton(
+              icon: const Icon(Icons.monitor_heart_outlined),
+              tooltip: 'My vitals',
+              onPressed: _loading ? null : _openVitals,
+            ),
             IconButton(
               icon: const Icon(Icons.edit),
               tooltip: 'Update contact details',
               onPressed: _loading ? null : _editContact,
             ),
+          ],
         ],
       ),
       body: _loading
@@ -237,18 +286,27 @@ class _MyPatientDetailsPageState extends State<MyPatientDetailsPage> {
                         _item('Address', _patient!.address),
                         _item('Gender', _patient!.gender),
                         _item('City', _patient!.city),
-                        _item('Birth Date', _patient!.birthDate),
-                        _item('Created Date', _patient!.createdDate),
+                        _item('Birth Date', _formatDate(_patient!.birthDate)),
+                        _item('Created Date', _formatDate(_patient!.createdDate)),
                         _item('Reference', _patient!.referenceName),
                         _item('Active', _patient!.isActive ? 'Yes' : 'No'),
                         const SizedBox(height: 16),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: OutlinedButton.icon(
-                            onPressed: _editContact,
-                            icon: const Icon(Icons.edit),
-                            label: const Text('Update contact details'),
-                          ),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 16,
+                          runSpacing: 12,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: _openVitals,
+                              icon: const Icon(Icons.monitor_heart_outlined),
+                              label: const Text('My vitals'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _editContact,
+                              icon: const Icon(Icons.edit),
+                              label: const Text('Update contact details'),
+                            ),
+                          ],
                         ),
                       ],
                     ),

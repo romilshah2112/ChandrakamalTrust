@@ -5,6 +5,8 @@ import 'package:optima_healthcare_mobile/features/patients/models/patient_create
 import 'package:optima_healthcare_mobile/features/patients/models/patient_data_update_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_detail.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_list_item.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/patient_vitals_model.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/patient_vitals_save_request.dart';
 
 class PatientRepository {
   PatientRepository({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
@@ -74,6 +76,50 @@ class PatientRepository {
     return _apiClient.deletePatient(
       accessToken: accessToken,
       patientDataId: patientDataId,
+    );
+  }
+
+  Future<List<PatientVitalsModel>> listPatientVitals({
+    required String accessToken,
+    required int patientDataId,
+  }) {
+    return _apiClient.listPatientVitals(
+      accessToken: accessToken,
+      patientDataId: patientDataId,
+    );
+  }
+
+  Future<void> createPatientVitals({
+    required String accessToken,
+    required int patientDataId,
+    required PatientVitalsSaveRequestModel request,
+  }) {
+    return _apiClient.createPatientVitals(
+      accessToken: accessToken,
+      patientDataId: patientDataId,
+      request: request,
+    );
+  }
+
+  Future<void> updatePatientVitals({
+    required String accessToken,
+    required int patientVitalsId,
+    required PatientVitalsSaveRequestModel request,
+  }) {
+    return _apiClient.updatePatientVitals(
+      accessToken: accessToken,
+      patientVitalsId: patientVitalsId,
+      request: request,
+    );
+  }
+
+  Future<void> deletePatientVitals({
+    required String accessToken,
+    required int patientVitalsId,
+  }) {
+    return _apiClient.deletePatientVitals(
+      accessToken: accessToken,
+      patientVitalsId: patientVitalsId,
     );
   }
 }

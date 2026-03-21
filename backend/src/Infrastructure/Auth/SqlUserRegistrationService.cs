@@ -24,15 +24,18 @@ public sealed class SqlUserRegistrationService : IUserRegistrationService
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
+        var normalizedEmailAddress = input.EmailAddress.Trim();
+
         const string existsSql = @"
 SELECT TOP 1 1
 FROM [AppUser]
-WHERE [MobileNumber] = @mobileNumber OR [EmailAddress] = @emailAddress";
+WHERE [MobileNumber] = @mobileNumber
+   OR LOWER(LTRIM(RTRIM(ISNULL([EmailAddress], '')))) = @emailAddress";
 
         await using (var existsCommand = new SqlCommand(existsSql, connection, (SqlTransaction)transaction))
         {
             existsCommand.Parameters.AddWithValue("@mobileNumber", input.MobileNumber);
-            existsCommand.Parameters.AddWithValue("@emailAddress", input.EmailAddress);
+            existsCommand.Parameters.AddWithValue("@emailAddress", normalizedEmailAddress.ToLowerInvariant());
             var exists = await existsCommand.ExecuteScalarAsync(cancellationToken);
             if (exists is not null)
             {
@@ -52,7 +55,7 @@ WHERE [MobileNumber] = @mobileNumber OR [EmailAddress] = @emailAddress";
             (SqlTransaction)transaction,
             roleName,
             input.MobileNumber,
-            input.EmailAddress,
+            normalizedEmailAddress,
             cancellationToken);
 
         if (linkedRecord is null)
@@ -77,7 +80,7 @@ VALUES
         command.Parameters.AddWithValue("@firstName", input.FirstName);
         command.Parameters.AddWithValue("@lastName", input.LastName);
         command.Parameters.AddWithValue("@mobileNumber", input.MobileNumber);
-        command.Parameters.AddWithValue("@emailAddress", input.EmailAddress);
+        command.Parameters.AddWithValue("@emailAddress", normalizedEmailAddress);
         command.Parameters.AddWithValue("@password", _passwordCryptoService.Encrypt(input.Password));
         command.Parameters.AddWithValue("@userRoleId", input.UserRoleId);
         command.Parameters.AddWithValue("@isEnabled", 1);
@@ -181,17 +184,20 @@ WHERE [lUserRoleId] = @userRoleId";
         string emailAddress,
         CancellationToken cancellationToken)
     {
+        var normalizedEmail = emailAddress.Trim().ToLowerInvariant();
         var sql = $@"
 SELECT TOP 1
     CAST([{idColumn}] AS int) AS [RecordId],
     ISNULL(CAST([lAppUserId] AS int), 0) AS [AppUserId]
 FROM [{tableName}]
 WHERE CAST([{mobileColumn}] AS bigint) = @mobileNumber
-   OR [{emailColumn}] = @emailAddress";
+   OR LOWER(LTRIM(RTRIM(ISNULL([{emailColumn}], '')))) = @emailAddress
+ORDER BY CASE WHEN ISNULL([lAppUserId], 0) <= 0 THEN 0 ELSE 1 END,
+         CAST([{idColumn}] AS int)";
 
         await using var command = new SqlCommand(sql, connection, transaction);
         command.Parameters.AddWithValue("@mobileNumber", mobileNumber);
-        command.Parameters.AddWithValue("@emailAddress", emailAddress);
+        command.Parameters.AddWithValue("@emailAddress", normalizedEmail);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))

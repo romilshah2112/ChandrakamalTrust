@@ -570,10 +570,13 @@ class _AdminMastersPageState extends State<AdminMastersPage>
           'gender': '',
           'photo': null,
           'isActive': true,
-          'appUserId': AuthSession.appUserId ?? 0,
+          'appUserId': existing?.appUserId ?? 0,
         }, id: existing?.id);
         await _load();
       },
+      successMessage: existing == null
+          ? 'Doctor saved successfully.'
+          : 'Doctor updated successfully.',
     );
   }
 
@@ -603,11 +606,14 @@ class _AdminMastersPageState extends State<AdminMastersPage>
           'address': '',
           'photo': null,
           'enteredById': AuthSession.appUserId ?? 0,
-          'appUserId': AuthSession.appUserId ?? 0,
+          'appUserId': existing?.appUserId ?? 0,
           'isActive': true,
         }, id: existing?.id);
         await _load();
       },
+      successMessage: existing == null
+          ? 'Staff saved successfully.'
+          : 'Staff updated successfully.',
     );
   }
 
@@ -757,7 +763,7 @@ class _AdminMastersPageState extends State<AdminMastersPage>
                       const SizedBox(width: 8),
                       FilledButton(
                         onPressed: () async {
-                          await _runAction(() async {
+                          final ok = await _runAction(() async {
                             final token = AuthSession.accessToken;
                             if (token == null) return;
 
@@ -777,8 +783,10 @@ class _AdminMastersPageState extends State<AdminMastersPage>
                               'appUserId': AuthSession.appUserId ?? 0,
                             }, id: existing?.id);
                             await _load();
-                          });
-                          if (ctx.mounted) {
+                          }, successMessage: existing == null
+                              ? 'Clinic schedule saved successfully.'
+                              : 'Clinic schedule updated successfully.');
+                          if (ok && ctx.mounted) {
                             Navigator.pop(ctx);
                           }
                         },
@@ -834,6 +842,9 @@ class _AdminMastersPageState extends State<AdminMastersPage>
         }, id: existing?.id);
         await _load();
       },
+      successMessage: existing == null
+          ? 'Invoice type saved successfully.'
+          : 'Invoice type updated successfully.',
     );
   }
 
@@ -868,6 +879,7 @@ class _AdminMastersPageState extends State<AdminMastersPage>
     required String title,
     required List<Widget> children,
     required Future<void> Function() onSave,
+    String? successMessage,
   }) async {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
     await showDialog<void>(
@@ -900,8 +912,11 @@ class _AdminMastersPageState extends State<AdminMastersPage>
                     const SizedBox(width: 8),
                     FilledButton(
                       onPressed: () async {
-                        await _runAction(onSave);
-                        if (ctx.mounted) {
+                        final ok = await _runAction(
+                          onSave,
+                          successMessage: successMessage,
+                        );
+                        if (ok && ctx.mounted) {
                           Navigator.pop(ctx);
                         }
                       },
@@ -917,15 +932,38 @@ class _AdminMastersPageState extends State<AdminMastersPage>
     );
   }
 
-  Future<void> _runAction(Future<void> Function() action) async {
+  Future<bool> _runAction(
+    Future<void> Function() action, {
+    String? successMessage,
+  }) async {
     try {
       await action();
+      if (!mounted) return false;
+      if (successMessage != null && successMessage.isNotEmpty) {
+        await _showResultDialog('Success', successMessage);
+      }
+      return true;
     } catch (ex) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_humanizeError(ex.toString()))));
+      if (!mounted) return false;
+      await _showResultDialog('Error', _humanizeError(ex.toString()));
+      return false;
     }
+  }
+
+  Future<void> _showResultDialog(String title, String message) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   String _clinicName(int clinicId) {

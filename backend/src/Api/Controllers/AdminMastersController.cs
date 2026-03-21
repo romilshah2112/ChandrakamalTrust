@@ -90,6 +90,7 @@ public sealed class AdminMastersController : ControllerBase
             return Forbid();
         }
 
+        request.AppUserId = 0;
         return StatusCode(StatusCodes.Status201Created, new { id = await _masterDataService.CreateDoctorProfileAsync(request, cancellationToken) });
     }
 
@@ -143,6 +144,7 @@ public sealed class AdminMastersController : ControllerBase
             return Forbid();
         }
 
+        request.AppUserId = 0;
         return StatusCode(StatusCodes.Status201Created, new { id = await _masterDataService.CreateStaffAsync(request, cancellationToken) });
     }
 

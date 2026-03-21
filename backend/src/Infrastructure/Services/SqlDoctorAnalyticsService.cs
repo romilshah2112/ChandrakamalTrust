@@ -127,11 +127,8 @@ SELECT
         WHEN pd.[Gender] IS NULL OR LTRIM(RTRIM(pd.[Gender])) = '' THEN 'Unknown'
         ELSE LTRIM(RTRIM(pd.[Gender]))
     END AS [Label],
-    COUNT(DISTINCT pd.[lPatientDataId]) AS [Value]
-FROM [PatientAppointment] pa
-INNER JOIN [patientdata] pd ON pd.[lPatientDataId] = pa.[lPatientDataId]
-WHERE ISNULL(pa.[IsActive], 1) = 1
-  AND (@doctorProfileId = 0 OR pa.[lDoctorProfileId] = @doctorProfileId)
+    COUNT(1) AS [Value]
+FROM [patientdata] pd
 GROUP BY
     CASE
         WHEN pd.[Gender] IS NULL OR LTRIM(RTRIM(pd.[Gender])) = '' THEN 'Unknown'
@@ -149,8 +146,7 @@ ORDER BY [Label]";
     {
         const string sql = @"
 WITH PatientAges AS (
-    SELECT DISTINCT
-        pd.[lPatientDataId],
+    SELECT
         CASE
             WHEN pd.[BirthDate] IS NULL THEN 'Unknown'
             WHEN DATEDIFF(YEAR, pd.[BirthDate], GETDATE()) < 18 THEN '0-17'
@@ -159,10 +155,7 @@ WITH PatientAges AS (
             WHEN DATEDIFF(YEAR, pd.[BirthDate], GETDATE()) BETWEEN 46 AND 60 THEN '46-60'
             ELSE '60+'
         END AS [Label]
-    FROM [PatientAppointment] pa
-    INNER JOIN [patientdata] pd ON pd.[lPatientDataId] = pa.[lPatientDataId]
-    WHERE ISNULL(pa.[IsActive], 1) = 1
-      AND (@doctorProfileId = 0 OR pa.[lDoctorProfileId] = @doctorProfileId)
+    FROM [patientdata] pd
 )
 SELECT [Label], COUNT(1) AS [Value]
 FROM PatientAges

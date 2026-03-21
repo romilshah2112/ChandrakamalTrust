@@ -183,9 +183,43 @@ class _ThreeDVerticalBarChart extends StatelessWidget {
 
     return SizedBox(
       height: 250,
-      child: CustomPaint(
-        painter: _VerticalBarPainter(data),
-        child: const SizedBox.expand(),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final barWidth = width / (data.length * 1.6);
+          final gap = barWidth * 0.6;
+          final chartHeight = 220.0;
+
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _VerticalBarPainter(data),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              ...data.asMap().entries.map((entry) {
+                final index = entry.key;
+                final item = entry.value;
+                final left = (gap / 2) + index * (barWidth + gap);
+                return Positioned(
+                  left: left,
+                  top: 0,
+                  width: barWidth + 10,
+                  height: chartHeight,
+                  child: Tooltip(
+                    message: '${item.label}: ${item.value.toStringAsFixed(0)}',
+                    waitDuration: const Duration(milliseconds: 150),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: Container(color: Colors.transparent),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          );
+        },
       ),
     );
   }
@@ -210,42 +244,46 @@ class _HorizontalRevenueChart extends StatelessWidget {
         final ratio = max <= 0 ? 0.0 : item.value / max;
         return Padding(
           padding: const EdgeInsets.only(bottom: 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(child: Text(item.label, overflow: TextOverflow.ellipsis)),
-                  const SizedBox(width: 8),
-                  Text('Rs ${item.value.toStringAsFixed(0)}'),
-                ],
-              ),
-              const SizedBox(height: 6),
-              LayoutBuilder(
-                builder: (context, constraints) => Stack(
+          child: Tooltip(
+            message: '${item.label}: Rs ${item.value.toStringAsFixed(0)}',
+            waitDuration: const Duration(milliseconds: 150),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Container(
-                      height: 18,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    Container(
-                      width: constraints.maxWidth * ratio.clamp(0, 1),
-                      height: 18,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [color.withValues(alpha: 0.85), color],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
+                    Expanded(child: Text(item.label, overflow: TextOverflow.ellipsis)),
+                    const SizedBox(width: 8),
+                    Text('Rs ${item.value.toStringAsFixed(0)}'),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 6),
+                LayoutBuilder(
+                  builder: (context, constraints) => Stack(
+                    children: [
+                      Container(
+                        height: 18,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      Container(
+                        width: constraints.maxWidth * ratio.clamp(0, 1),
+                        height: 18,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [color.withValues(alpha: 0.85), color],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       }).toList(),

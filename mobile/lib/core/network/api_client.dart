@@ -20,6 +20,8 @@ import 'package:optima_healthcare_mobile/features/patients/models/patient_create
 import 'package:optima_healthcare_mobile/features/patients/models/patient_data_update_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_detail.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_list_item.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/patient_vitals_model.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/patient_vitals_save_request.dart';
 
 class ApiClient {
   ApiClient({http.Client? httpClient})
@@ -355,6 +357,132 @@ class ApiClient {
     }
 
     throw AuthException('Delete patient failed: HTTP ${response.statusCode}');
+  }
+
+  Future<List<PatientVitalsModel>> listPatientVitals({
+    required String accessToken,
+    required int patientDataId,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/patient-data/$patientDataId/vitals',
+    );
+    final response = await _httpClient.get(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map(
+            (item) => PatientVitalsModel.fromJson(item as Map<String, dynamic>),
+          )
+          .toList();
+    }
+
+    if (response.statusCode == 400) {
+      final body = response.body.trim();
+      throw AuthException(body.isEmpty ? 'Invalid patient id.' : body);
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException('You are not allowed to view patient vitals.');
+    }
+
+    throw AuthException(
+      'List patient vitals failed: HTTP ${response.statusCode}',
+    );
+  }
+
+  Future<void> createPatientVitals({
+    required String accessToken,
+    required int patientDataId,
+    required PatientVitalsSaveRequestModel request,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/patient-data/$patientDataId/vitals',
+    );
+    final response = await _httpClient.post(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(request.toJson()),
+    );
+
+    if (response.statusCode == 201) {
+      return;
+    }
+
+    if (response.statusCode == 400) {
+      final body = response.body.trim();
+      throw AuthException(body.isEmpty ? 'Invalid vitals details.' : body);
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException('You are not allowed to add patient vitals.');
+    }
+
+    throw AuthException(
+      'Create patient vitals failed: HTTP ${response.statusCode}',
+    );
+  }
+
+  Future<void> updatePatientVitals({
+    required String accessToken,
+    required int patientVitalsId,
+    required PatientVitalsSaveRequestModel request,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/api/v1/patient-vitals/$patientVitalsId');
+    final response = await _httpClient.put(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(request.toJson()),
+    );
+
+    if (response.statusCode == 204) {
+      return;
+    }
+
+    if (response.statusCode == 404) {
+      throw const AuthException('Patient vitals not found.');
+    }
+
+    if (response.statusCode == 400) {
+      final body = response.body.trim();
+      throw AuthException(body.isEmpty ? 'Invalid vitals details.' : body);
+    }
+
+    throw AuthException(
+      'Update patient vitals failed: HTTP ${response.statusCode}',
+    );
+  }
+
+  Future<void> deletePatientVitals({
+    required String accessToken,
+    required int patientVitalsId,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/api/v1/patient-vitals/$patientVitalsId');
+    final response = await _httpClient.delete(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 204) {
+      return;
+    }
+
+    if (response.statusCode == 404) {
+      throw const AuthException('Patient vitals not found.');
+    }
+
+    throw AuthException(
+      'Delete patient vitals failed: HTTP ${response.statusCode}',
+    );
   }
 
   Future<List<LookupOptionModel>> getReferenceTypes({

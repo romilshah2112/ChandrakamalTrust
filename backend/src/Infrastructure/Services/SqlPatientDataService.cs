@@ -61,16 +61,21 @@ VALUES
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
+        var patientDataId = await ResolvePatientDataIdForAppUserAsync(connection, appUserId, cancellationToken);
+        if (patientDataId <= 0)
+        {
+            return null;
+        }
+
         const string sql = @"
 SELECT TOP 1
     [lPatientDataId], [FirstName], [LastName], [MobileNo], [Email], [Address], [Gender], [City],
     [BirthDate], [CreatedDate], [ImageName], [lAppUserId], [lReferenceTypeId], [ReferenceName], [IsActive]
 FROM [patientdata]
-WHERE [lAppUserId] = @appUserId
-ORDER BY [CreatedDate] DESC, [lPatientDataId] DESC";
+WHERE [lPatientDataId] = @patientDataId";
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@appUserId", appUserId);
+        command.Parameters.AddWithValue("@patientDataId", patientDataId);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
@@ -182,20 +187,22 @@ WHERE [lPatientDataId] = @patientDataId";
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
+        var patientDataId = await ResolvePatientDataIdForAppUserAsync(connection, appUserId, cancellationToken);
+        if (patientDataId <= 0)
+        {
+            return false;
+        }
+
         const string sql = @"
 UPDATE [patientdata] SET
     [MobileNo] = @mobileNo,
     [Email] = @email,
     [Address] = @address,
     [City] = @city
-WHERE [lPatientDataId] = (
-    SELECT TOP 1 [lPatientDataId] FROM [patientdata]
-    WHERE [lAppUserId] = @appUserId
-    ORDER BY [CreatedDate] DESC, [lPatientDataId] DESC
-)";
+WHERE [lPatientDataId] = @patientDataId";
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@appUserId", appUserId);
+        command.Parameters.AddWithValue("@patientDataId", patientDataId);
         command.Parameters.AddWithValue("@mobileNo", request.MobileNo);
         command.Parameters.AddWithValue("@email", request.Email);
         command.Parameters.AddWithValue("@address", request.Address);
@@ -203,6 +210,84 @@ WHERE [lPatientDataId] = (
 
         var rows = await command.ExecuteNonQueryAsync(cancellationToken);
         return rows > 0;
+    }
+
+    private static async Task<int> ResolvePatientDataIdForAppUserAsync(
+        SqlConnection connection,
+        int appUserId,
+        CancellationToken cancellationToken)
+    {
+        const string linkedSql = @"
+SELECT TOP 1 [lPatientDataId]
+FROM [patientdata]
+WHERE [lAppUserId] = @appUserId
+ORDER BY [CreatedDate] DESC, [lPatientDataId] DESC";
+
+        await using (var linkedCommand = new SqlCommand(linkedSql, connection))
+        {
+            linkedCommand.Parameters.AddWithValue("@appUserId", appUserId);
+            var linkedResult = await linkedCommand.ExecuteScalarAsync(cancellationToken);
+            if (linkedResult is not null and not DBNull)
+            {
+                return Convert.ToInt32(linkedResult);
+            }
+        }
+
+        const string appUserSql = @"
+SELECT TOP 1 [MobileNumber], LOWER(LTRIM(RTRIM(ISNULL([EmailAddress], '')))) AS [NormalizedEmail]
+FROM [AppUser]
+WHERE [lAppUserId] = @appUserId";
+
+        long mobileNumber;
+        string normalizedEmail;
+        await using (var appUserCommand = new SqlCommand(appUserSql, connection))
+        {
+            appUserCommand.Parameters.AddWithValue("@appUserId", appUserId);
+            await using var reader = await appUserCommand.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                return 0;
+            }
+
+            mobileNumber = reader["MobileNumber"] is null or DBNull ? 0 : Convert.ToInt64(reader["MobileNumber"]);
+            normalizedEmail = reader["NormalizedEmail"]?.ToString() ?? string.Empty;
+        }
+
+        const string fallbackSql = @"
+SELECT TOP 1 [lPatientDataId]
+FROM [patientdata]
+WHERE (@mobileNumber > 0 AND CAST([MobileNo] AS bigint) = @mobileNumber)
+   OR (@emailAddress <> '' AND LOWER(LTRIM(RTRIM(ISNULL([Email], '')))) = @emailAddress)
+ORDER BY CASE WHEN ISNULL([lAppUserId], 0) <= 0 THEN 0 ELSE 1 END,
+         [CreatedDate] DESC,
+         [lPatientDataId] DESC";
+
+        int patientDataId;
+        await using (var fallbackCommand = new SqlCommand(fallbackSql, connection))
+        {
+            fallbackCommand.Parameters.AddWithValue("@mobileNumber", mobileNumber);
+            fallbackCommand.Parameters.AddWithValue("@emailAddress", normalizedEmail);
+            var fallbackResult = await fallbackCommand.ExecuteScalarAsync(cancellationToken);
+            if (fallbackResult is null or DBNull)
+            {
+                return 0;
+            }
+
+            patientDataId = Convert.ToInt32(fallbackResult);
+        }
+
+        const string linkSql = @"
+UPDATE [patientdata]
+SET [lAppUserId] = @appUserId
+WHERE [lPatientDataId] = @patientDataId
+  AND ISNULL([lAppUserId], 0) <= 0";
+
+        await using var linkCommand = new SqlCommand(linkSql, connection);
+        linkCommand.Parameters.AddWithValue("@appUserId", appUserId);
+        linkCommand.Parameters.AddWithValue("@patientDataId", patientDataId);
+        await linkCommand.ExecuteNonQueryAsync(cancellationToken);
+
+        return patientDataId;
     }
 
     public async Task<bool> UpdateAsync(int patientDataId, PatientDataUpdateRequest request, CancellationToken cancellationToken)

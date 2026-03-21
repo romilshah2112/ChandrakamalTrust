@@ -146,7 +146,7 @@ WHERE [lClinicId] = @id AND ([IsActive] = 1 OR [IsActive] = 'true')";
 
     public async Task<int> CreateDoctorProfileAsync(SaveDoctorProfileRequest request, CancellationToken cancellationToken)
     {
-        const string sql = @"INSERT INTO [DoctorProfile]([DoctorName],[DoctorDegree],[DoctorStream],[lClinicId],[DoctorCity],[lCountryId],[Phone],[Email],[Gender],[Photo],[InsertedOn],[UpdatedOn],[IsActive],[lAppUserId]) OUTPUT INSERTED.[lDoctorProfileId] VALUES(@name,@deg,@stream,@clinic,@city,@country,@phone,@email,@gender,@photo,@ins,@upd,@active,@appUserId)";
+        const string sql = @"INSERT INTO [DoctorProfile]([DoctorName],[DoctorDegree],[DoctorStream],[lClinicId],[DoctorCity],[lCountryId],[Phone],[Email],[Gender],[Photo],[InsertedOn],[UpdatedOn],[IsActive],[lAppUserId]) OUTPUT INSERTED.[lDoctorProfileId] VALUES(@name,@deg,@stream,@clinic,@city,@country,@phone,@email,@gender,@photo,@ins,@upd,@active,NULL)";
         await using var con = new SqlConnection(_connectionString);
         await con.OpenAsync(cancellationToken);
         await using var cmd = new SqlCommand(sql, con);
@@ -159,7 +159,7 @@ WHERE [lClinicId] = @id AND ([IsActive] = 1 OR [IsActive] = 'true')";
 
     public async Task UpdateDoctorProfileAsync(int doctorProfileId, SaveDoctorProfileRequest request, CancellationToken cancellationToken)
     {
-        const string sql = @"UPDATE [DoctorProfile] SET [DoctorName]=@name,[DoctorDegree]=@deg,[DoctorStream]=@stream,[lClinicId]=@clinic,[DoctorCity]=@city,[lCountryId]=@country,[Phone]=@phone,[Email]=@email,[Gender]=@gender,[Photo]=@photo,[UpdatedOn]=@upd,[IsActive]=@active,[lAppUserId]=@appUserId WHERE [lDoctorProfileId]=@id";
+        const string sql = @"UPDATE [DoctorProfile] SET [DoctorName]=@name,[DoctorDegree]=@deg,[DoctorStream]=@stream,[lClinicId]=@clinic,[DoctorCity]=@city,[lCountryId]=@country,[Phone]=@phone,[Email]=@email,[Gender]=@gender,[Photo]=@photo,[UpdatedOn]=@upd,[IsActive]=@active WHERE [lDoctorProfileId]=@id";
         await using var con = new SqlConnection(_connectionString);
         await con.OpenAsync(cancellationToken);
         await using var cmd = new SqlCommand(sql, con);
@@ -218,7 +218,7 @@ WHERE [lClinicId] = @id AND ([IsActive] = 1 OR [IsActive] = 'true')";
 
     public async Task<int> CreateStaffAsync(SaveStaffRequest request, CancellationToken cancellationToken)
     {
-        const string sql = @"INSERT INTO [Staff]([Name],[Qualification],[Mobile],[Email],[Gender],[Address],[Photo],[InsertedOn],[lEnteredById],[lAppUserId],[IsActive]) OUTPUT INSERTED.[lStaffId] VALUES(@name,@qual,@mobile,@email,@gender,@addr,@photo,@ins,@enteredBy,@appUserId,@active)";
+        const string sql = @"INSERT INTO [Staff]([Name],[Qualification],[Mobile],[Email],[Gender],[Address],[Photo],[InsertedOn],[lEnteredById],[lAppUserId],[IsActive]) OUTPUT INSERTED.[lStaffId] VALUES(@name,@qual,@mobile,@email,@gender,@addr,@photo,@ins,@enteredBy,NULL,@active)";
         await using var con = new SqlConnection(_connectionString);
         await con.OpenAsync(cancellationToken);
         await using var cmd = new SqlCommand(sql, con);
@@ -230,7 +230,7 @@ WHERE [lClinicId] = @id AND ([IsActive] = 1 OR [IsActive] = 'true')";
 
     public async Task UpdateStaffAsync(int staffId, SaveStaffRequest request, CancellationToken cancellationToken)
     {
-        const string sql = @"UPDATE [Staff] SET [Name]=@name,[Qualification]=@qual,[Mobile]=@mobile,[Email]=@email,[Gender]=@gender,[Address]=@addr,[Photo]=@photo,[lEnteredById]=@enteredBy,[lAppUserId]=@appUserId,[IsActive]=@active WHERE [lStaffId]=@id";
+        const string sql = @"UPDATE [Staff] SET [Name]=@name,[Qualification]=@qual,[Mobile]=@mobile,[Email]=@email,[Gender]=@gender,[Address]=@addr,[Photo]=@photo,[lEnteredById]=@enteredBy,[IsActive]=@active WHERE [lStaffId]=@id";
         await using var con = new SqlConnection(_connectionString);
         await con.OpenAsync(cancellationToken);
         await using var cmd = new SqlCommand(sql, con);
@@ -559,7 +559,6 @@ VALUES({string.Join(",", insertValues)})";
         cmd.Parameters.AddWithValue("@gender", request.Gender);
         cmd.Parameters.AddWithValue("@photo", (object?)request.Photo ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@active", request.IsActive);
-        cmd.Parameters.AddWithValue("@appUserId", request.AppUserId);
     }
 
     private static void BindStaff(SqlCommand cmd, SaveStaffRequest request)
@@ -572,7 +571,6 @@ VALUES({string.Join(",", insertValues)})";
         cmd.Parameters.AddWithValue("@addr", request.Address);
         cmd.Parameters.AddWithValue("@photo", (object?)request.Photo ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@enteredBy", request.EnteredById);
-        cmd.Parameters.AddWithValue("@appUserId", request.AppUserId);
         cmd.Parameters.AddWithValue("@active", request.IsActive);
     }
 

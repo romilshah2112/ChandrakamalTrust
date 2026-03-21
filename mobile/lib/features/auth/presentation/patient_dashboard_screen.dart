@@ -103,7 +103,7 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.person),
-              title: const Text('My Patient Details'),
+              title: const Text('My Health Records'),
               onTap: () {
                 Navigator.pop(context);
                 setState(() => _selectedNavIndex = 2);

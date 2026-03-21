@@ -250,6 +250,15 @@ class _NewPatientPageState extends State<NewPatientPage> {
         ),
       );
 
+      if (!mounted) {
+        return;
+      }
+
+      await _showResultDialog(
+        title: 'Success',
+        message: 'Patient onboarded successfully.',
+      );
+
       setState(() {
         _message = 'Patient onboarded successfully.';
       });
@@ -263,12 +272,18 @@ class _NewPatientPageState extends State<NewPatientPage> {
       _referenceName.clear();
       _selectedGender = null;
       _selectedBirthDate = null;
-      _selectedReferenceTypeId = _referenceTypes.isNotEmpty ? _referenceTypes.first.id : null;
+      _selectedReferenceTypeId = _referenceTypes.isNotEmpty
+          ? _referenceTypes.first.id
+          : null;
       _clearSelectedImage();
     } catch (ex) {
+      final message = ex.toString().replaceFirst('Exception: ', '');
       setState(() {
-        _error = ex.toString();
+        _error = message;
       });
+      if (mounted) {
+        await _showResultDialog(title: 'Error', message: message);
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -276,6 +291,25 @@ class _NewPatientPageState extends State<NewPatientPage> {
         });
       }
     }
+  }
+
+  Future<void> _showResultDialog({
+    required String title,
+    required String message,
+  }) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

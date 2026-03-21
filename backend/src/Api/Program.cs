@@ -30,6 +30,7 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddScoped<IPatientReadService, InMemoryPatientReadService>();
 builder.Services.AddScoped<IPatientDataService, SqlPatientDataService>();
+builder.Services.AddScoped<IPatientVitalsService, SqlPatientVitalsService>();
 builder.Services.AddScoped<IReferenceTypeService, SqlReferenceTypeService>();
 builder.Services.AddScoped<IImageStorageService, CloudinaryImageStorageService>();
 builder.Services.AddScoped<IPatientAppointmentService, SqlPatientAppointmentService>();

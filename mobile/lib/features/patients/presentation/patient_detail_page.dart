@@ -4,6 +4,7 @@ import 'package:optima_healthcare_mobile/features/auth/models/auth_session.dart'
 import 'package:optima_healthcare_mobile/features/patients/presentation/patient_edit_page.dart';
 import 'package:optima_healthcare_mobile/features/patients/data/patient_repository.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_detail.dart';
+import 'package:optima_healthcare_mobile/features/patients/presentation/patient_vitals_page.dart';
 
 class PatientDetailPage extends StatefulWidget {
   const PatientDetailPage({super.key, required this.patientDataId});
@@ -136,6 +137,21 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
     if (updated == true && mounted) _load();
   }
 
+  Future<void> _navigateToVitals() async {
+    if (_patient == null) {
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => PatientVitalsPage(
+          patientDataId: widget.patientDataId,
+          patientName: '${_patient!.firstName} ${_patient!.lastName}'.trim(),
+        ),
+      ),
+    );
+  }
+
   String? _normalizeRemoteImageUrl(String? value) {
     final trimmed = value?.trim();
     if (trimmed == null || trimmed.isEmpty) {
@@ -176,6 +192,11 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
         title: const Text('Patient details'),
         actions: [
           if (_patient != null) ...[
+            IconButton(
+              icon: const Icon(Icons.monitor_heart_outlined),
+              tooltip: 'Vitals',
+              onPressed: _loading || _deleting ? null : _navigateToVitals,
+            ),
             IconButton(
               icon: const Icon(Icons.edit),
               tooltip: 'Edit',
@@ -226,15 +247,21 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
                         _item('Reference', _patient!.referenceName),
                         _item('Active', _patient!.isActive ? 'Yes' : 'No'),
                         const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 16,
+                          runSpacing: 12,
                           children: [
+                            FilledButton.icon(
+                              onPressed: _navigateToVitals,
+                              icon: const Icon(Icons.monitor_heart_outlined),
+                              label: const Text('Vitals'),
+                            ),
                             FilledButton.icon(
                               onPressed: _navigateToEdit,
                               icon: const Icon(Icons.edit),
                               label: const Text('Edit'),
                             ),
-                            const SizedBox(width: 16),
                             OutlinedButton.icon(
                               onPressed: _deleting ? null : _delete,
                               style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
