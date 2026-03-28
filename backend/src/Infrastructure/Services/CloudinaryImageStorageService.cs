@@ -117,7 +117,6 @@ public sealed class CloudinaryImageStorageService : IImageStorageService
             var rawParams = new RawUploadParams
             {
                 File = new FileDescription(safeName, stream),
-                Folder = AssetFolder,
                 PublicId = $"{AssetFolder}/{publicId}"
             };
 

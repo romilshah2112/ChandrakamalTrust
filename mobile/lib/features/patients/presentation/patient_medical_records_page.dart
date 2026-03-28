@@ -30,15 +30,26 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
   static const int _maxBytes = 20 * 1024 * 1024;
 
   final _repo = PatientRepository();
+  final _recordNameCtrl = TextEditingController();
+  final _commentsCtrl = TextEditingController();
+  final _uploadFormKey = GlobalKey<FormState>();
 
   bool _loading = true;
   String? _error;
   List<PatientMedicalRecordModel> _records = const [];
+  int? _downloadingId;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _recordNameCtrl.dispose();
+    _commentsCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -81,8 +92,23 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
     }
   }
 
-  Future<void> _openUrl(String url) async {
-    final uri = Uri.tryParse(url.trim());
+  /// Inserts Cloudinary's fl_attachment flag (optionally with filename) so the
+  /// browser prompts a file download rather than trying to render the URL.
+  String _makeDownloadUrl(String url, String recordName) {
+    const marker = '/upload/';
+    final idx = url.indexOf(marker);
+    if (idx == -1) return url;
+    final insertAt = idx + marker.length;
+    // Sanitise the suggested file name (Cloudinary rejects spaces/special chars)
+    final safeName = recordName
+        .replaceAll(RegExp(r'[^\w.\-]'), '_')
+        .replaceAll(RegExp(r'_+'), '_');
+    final flag = 'fl_attachment:$safeName';
+    return '${url.substring(0, insertAt)}$flag/${url.substring(insertAt)}';
+  }
+
+  Future<void> _downloadDocument(PatientMedicalRecordModel r) async {
+    final uri = Uri.tryParse(_makeDownloadUrl(r.fileUrl.trim(), r.recordName));
     if (uri == null || !uri.hasScheme) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -91,11 +117,17 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
       }
       return;
     }
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open document.')),
-      );
+
+    setState(() => _downloadingId = r.id);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open document.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _downloadingId = null);
     }
   }
 
@@ -147,9 +179,11 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
 
     final messenger = ScaffoldMessenger.of(context);
 
-    final recordNameCtrl = TextEditingController();
-    final commentsCtrl = TextEditingController();
-    final formKey = GlobalKey<FormState>();
+    _recordNameCtrl.clear();
+    _commentsCtrl.clear();
+    final recordNameCtrl = _recordNameCtrl;
+    final commentsCtrl = _commentsCtrl;
+    final formKey = _uploadFormKey;
     int? selectedTypeId = recordTypes.first.id;
     DateTime? reportDate = DateTime.now();
     Uint8List? fileBytes;
@@ -387,8 +421,6 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
       },
     );
 
-    recordNameCtrl.dispose();
-    commentsCtrl.dispose();
   }
 
   static String _contentTypeForExtension(String ext) {
@@ -467,6 +499,7 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
                           itemCount: _records.length,
                           itemBuilder: (context, i) {
                             final r = _records[i];
+                            final isDownloading = _downloadingId == r.id;
                             return Card(
                               child: ListTile(
                                 title: Text(r.recordName),
@@ -475,12 +508,23 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
                                   '${r.comments?.isNotEmpty == true ? r.comments! : 'No comments'}',
                                 ),
                                 isThreeLine: true,
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.open_in_new),
-                                  tooltip: 'Open document',
-                                  onPressed: () => _openUrl(r.fileUrl),
-                                ),
-                                onTap: () => _openUrl(r.fileUrl),
+                                trailing: isDownloading
+                                    ? const SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : IconButton(
+                                        icon: const Icon(Icons.download),
+                                        tooltip: 'Download document',
+                                        onPressed: () =>
+                                            _downloadDocument(r),
+                                      ),
+                                onTap: isDownloading
+                                    ? null
+                                    : () => _downloadDocument(r),
                               ),
                             );
                           },
