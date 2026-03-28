@@ -22,9 +22,10 @@ public sealed class SqlRecordTypeService : IRecordTypeService
         await connection.OpenAsync(cancellationToken);
 
         const string sql = @"
-SELECT [lRecordTypeId], [Record]
+SELECT [lRecordTypeId], [Name]
 FROM [RecordType]
-ORDER BY [Record], [lRecordTypeId]";
+WHERE [IsActive] = 1
+ORDER BY [Name], [lRecordTypeId]";
 
         await using var command = new SqlCommand(sql, connection);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -33,7 +34,7 @@ ORDER BY [Record], [lRecordTypeId]";
         while (await reader.ReadAsync(cancellationToken))
         {
             var id = Convert.ToInt32(reader["lRecordTypeId"]);
-            var name = reader["Record"] is DBNull or null ? "" : reader["Record"].ToString() ?? "";
+            var name = reader["Name"] is DBNull or null ? "" : reader["Name"].ToString() ?? "";
             list.Add(new RecordTypeItemDto { Id = id, Name = name });
         }
 
