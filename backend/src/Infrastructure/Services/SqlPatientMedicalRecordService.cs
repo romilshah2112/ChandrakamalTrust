@@ -91,6 +91,29 @@ VALUES
         return Convert.ToInt32(inserted);
     }
 
+    public async Task<string?> GetFileUrlAsync(
+        int recordId,
+        int patientDataId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        const string sql = @"
+SELECT TOP 1 [FileURL]
+FROM [PatientMedicalRecord]
+WHERE [lPatientMedicalRecordId] = @recordId
+  AND [lPatientDataId] = @patientDataId
+  AND [IsActive] = 1";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@recordId", recordId);
+        command.Parameters.AddWithValue("@patientDataId", patientDataId);
+
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is null or DBNull ? null : result.ToString();
+    }
+
     private static PatientMedicalRecordDto Map(SqlDataReader reader)
     {
         return new PatientMedicalRecordDto

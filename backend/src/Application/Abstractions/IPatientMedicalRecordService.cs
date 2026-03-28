@@ -15,4 +15,7 @@ public interface IPatientMedicalRecordService
         string? comments,
         int uploadedByAppUserId,
         CancellationToken cancellationToken);
+
+    /// <summary>Returns the raw FileURL for one record, or null if not found.</summary>
+    Task<string?> GetFileUrlAsync(int recordId, int patientDataId, CancellationToken cancellationToken);
 }

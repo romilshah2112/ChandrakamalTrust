@@ -131,6 +131,49 @@ public sealed class PatientMedicalRecordsController : ControllerBase
         return StatusCode(StatusCodes.Status201Created, new { patientMedicalRecordId = id });
     }
 
+    /// <summary>
+    /// Proxy endpoint: fetches the stored file from Cloudinary server-side and
+    /// streams the bytes back to the authenticated Flutter client.  This avoids
+    /// any Cloudinary authentication / CORS issues that arise when the mobile
+    /// app tries to call the Cloudinary URL directly.
+    /// </summary>
+    [HttpGet("api/v1/patient-data/{patientDataId:int}/medical-records/{recordId:int}/file")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult> DownloadFile(
+        int patientDataId,
+        int recordId,
+        CancellationToken cancellationToken)
+    {
+        if (!IsStaffUser()) return Forbid();
+
+        var fileUrl = await _medicalRecordService.GetFileUrlAsync(recordId, patientDataId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(fileUrl)) return NotFound();
+
+        using var httpClient = new HttpClient();
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.GetAsync(fileUrl, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, $"Could not fetch document: {ex.Message}");
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return StatusCode((int)response.StatusCode, "Document storage returned an error.");
+        }
+
+        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        var contentType = response.Content.Headers.ContentType?.MediaType
+                          ?? (fileUrl.Contains("/image/") ? "image/jpeg" : "application/pdf");
+
+        return File(bytes, contentType);
+    }
+
     private bool IsStaffUser()
     {
         var role = User.GetRoleName();
