@@ -20,6 +20,8 @@ import 'package:optima_healthcare_mobile/features/patients/models/patient_create
 import 'package:optima_healthcare_mobile/features/patients/models/patient_data_update_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_detail.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_list_item.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/patient_medical_record_model.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/save_patient_medical_record_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_vitals_model.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_vitals_save_request.dart';
 
@@ -359,6 +361,85 @@ class ApiClient {
     throw AuthException('Delete patient failed: HTTP ${response.statusCode}');
   }
 
+  Future<List<PatientMedicalRecordModel>> listPatientMedicalRecords({
+    required String accessToken,
+    required int patientDataId,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/patient-data/$patientDataId/medical-records',
+    );
+    final response = await _httpClient.get(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map(
+            (item) => PatientMedicalRecordModel.fromJson(
+              item as Map<String, dynamic>,
+            ),
+          )
+          .toList();
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException('You are not allowed to view medical records.');
+    }
+
+    if (response.statusCode == 404) {
+      throw const AuthException(
+        'Medical records could not be loaded. If the problem continues, deploy the latest API or check the patient id.',
+      );
+    }
+
+    throw AuthException(
+      'List medical records failed: HTTP ${response.statusCode}',
+    );
+  }
+
+  Future<void> createPatientMedicalRecord({
+    required String accessToken,
+    required int patientDataId,
+    required SavePatientMedicalRecordRequestModel request,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/patient-data/$patientDataId/medical-records',
+    );
+    final response = await _httpClient.post(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(request.toJson()),
+    );
+
+    if (response.statusCode == 201) {
+      return;
+    }
+
+    if (response.statusCode == 404) {
+      throw const AuthException('Patient not found.');
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException('You are not allowed to upload medical records.');
+    }
+
+    if (response.statusCode == 400) {
+      final body = response.body.trim();
+      throw AuthException(
+        body.isEmpty ? 'Invalid medical record details.' : body,
+      );
+    }
+
+    throw AuthException(
+      'Upload medical record failed: HTTP ${response.statusCode}',
+    );
+  }
+
   Future<List<PatientVitalsModel>> listPatientVitals({
     required String accessToken,
     required int patientDataId,
@@ -513,6 +594,37 @@ class ApiClient {
 
     throw AuthException(
       'Get reference types failed: HTTP ${response.statusCode}',
+    );
+  }
+
+  Future<List<LookupOptionModel>> getRecordTypes({
+    required String accessToken,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/api/v1/record-types');
+    final response = await _httpClient.get(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map((item) {
+            final map = item as Map<String, dynamic>;
+            return LookupOptionModel(
+              id: (map['id'] as num).toInt(),
+              name: map['name'] as String? ?? '',
+            );
+          })
+          .toList();
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException('You are not allowed to view record types.');
+    }
+
+    throw AuthException(
+      'Get record types failed: HTTP ${response.statusCode}',
     );
   }
 

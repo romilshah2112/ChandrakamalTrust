@@ -5,6 +5,8 @@ import 'package:optima_healthcare_mobile/features/patients/models/patient_create
 import 'package:optima_healthcare_mobile/features/patients/models/patient_data_update_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_detail.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_list_item.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/patient_medical_record_model.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/save_patient_medical_record_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_vitals_model.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_vitals_save_request.dart';
 
@@ -24,6 +26,34 @@ class PatientRepository {
     required String accessToken,
   }) {
     return _apiClient.getReferenceTypes(accessToken: accessToken);
+  }
+
+  Future<List<LookupOptionModel>> getRecordTypes({
+    required String accessToken,
+  }) {
+    return _apiClient.getRecordTypes(accessToken: accessToken);
+  }
+
+  Future<List<PatientMedicalRecordModel>> listPatientMedicalRecords({
+    required String accessToken,
+    required int patientDataId,
+  }) {
+    return _apiClient.listPatientMedicalRecords(
+      accessToken: accessToken,
+      patientDataId: patientDataId,
+    );
+  }
+
+  Future<void> createPatientMedicalRecord({
+    required String accessToken,
+    required int patientDataId,
+    required SavePatientMedicalRecordRequestModel request,
+  }) {
+    return _apiClient.createPatientMedicalRecord(
+      accessToken: accessToken,
+      patientDataId: patientDataId,
+      request: request,
+    );
   }
 
   Future<PatientDetailModel> getMyPatientDetails({required String accessToken}) {

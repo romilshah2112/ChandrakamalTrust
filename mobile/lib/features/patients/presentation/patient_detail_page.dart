@@ -4,6 +4,7 @@ import 'package:optima_healthcare_mobile/features/auth/models/auth_session.dart'
 import 'package:optima_healthcare_mobile/features/patients/presentation/patient_edit_page.dart';
 import 'package:optima_healthcare_mobile/features/patients/data/patient_repository.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_detail.dart';
+import 'package:optima_healthcare_mobile/features/patients/presentation/patient_medical_records_page.dart';
 import 'package:optima_healthcare_mobile/features/patients/presentation/patient_vitals_page.dart';
 
 class PatientDetailPage extends StatefulWidget {
@@ -152,6 +153,21 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
     );
   }
 
+  Future<void> _navigateToMedicalRecords() async {
+    if (_patient == null) {
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => PatientMedicalRecordsPage(
+          patientDataId: widget.patientDataId,
+          patientName: '${_patient!.firstName} ${_patient!.lastName}'.trim(),
+        ),
+      ),
+    );
+  }
+
   String? _normalizeRemoteImageUrl(String? value) {
     final trimmed = value?.trim();
     if (trimmed == null || trimmed.isEmpty) {
@@ -196,6 +212,11 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
               icon: const Icon(Icons.monitor_heart_outlined),
               tooltip: 'Vitals',
               onPressed: _loading || _deleting ? null : _navigateToVitals,
+            ),
+            IconButton(
+              icon: const Icon(Icons.folder_shared_outlined),
+              tooltip: 'Medical records',
+              onPressed: _loading || _deleting ? null : _navigateToMedicalRecords,
             ),
             IconButton(
               icon: const Icon(Icons.edit),
@@ -256,6 +277,11 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
                               onPressed: _navigateToVitals,
                               icon: const Icon(Icons.monitor_heart_outlined),
                               label: const Text('Vitals'),
+                            ),
+                            FilledButton.icon(
+                              onPressed: _navigateToMedicalRecords,
+                              icon: const Icon(Icons.folder_shared_outlined),
+                              label: const Text('Medical records'),
                             ),
                             FilledButton.icon(
                               onPressed: _navigateToEdit,

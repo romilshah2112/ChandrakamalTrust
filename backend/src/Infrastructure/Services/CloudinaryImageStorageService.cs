@@ -8,6 +8,7 @@ namespace OptimaHealthcare.Infrastructure.Services;
 public sealed class CloudinaryImageStorageService : IImageStorageService
 {
     private const int MaxBytes = 50 * 1024;
+    private const int MaxMedicalDocumentBytes = 20 * 1024 * 1024;
     private const string AssetFolder = "OptimaHealthcare";
     private readonly Cloudinary _cloudinary;
     private readonly string _cloudName;
@@ -75,6 +76,91 @@ public sealed class CloudinaryImageStorageService : IImageStorageService
         }
 
         return $"{publicId}.{format}";
+    }
+
+    public async Task<string> UploadMedicalDocumentAsync(
+        byte[] bytes,
+        string fileName,
+        string contentType,
+        CancellationToken cancellationToken)
+    {
+        if (bytes.Length == 0)
+        {
+            throw new InvalidOperationException("Document is empty.");
+        }
+
+        if (bytes.Length > MaxMedicalDocumentBytes)
+        {
+            throw new InvalidOperationException("Document must be 20MB or less.");
+        }
+
+        var normalizedType = (contentType ?? string.Empty).Trim().ToLowerInvariant();
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        var isPdf = normalizedType == "application/pdf" || ext == ".pdf";
+        var isImage = normalizedType is "image/jpeg" or "image/png" or "image/bmp"
+                      || ext is ".jpg" or ".jpeg" or ".png" or ".bmp";
+
+        if (!isPdf && !isImage)
+        {
+            throw new InvalidOperationException("Only JPG, PNG, BMP, and PDF files are allowed.");
+        }
+
+        var safeName = string.IsNullOrWhiteSpace(fileName)
+            ? (isPdf ? "document.pdf" : "document.jpg")
+            : Path.GetFileName(fileName);
+        var publicId = $"medical-{Guid.NewGuid():N}";
+
+        await using var stream = new MemoryStream(bytes, writable: false);
+
+        if (isPdf)
+        {
+            var rawParams = new RawUploadParams
+            {
+                File = new FileDescription(safeName, stream),
+                Folder = AssetFolder,
+                PublicId = $"{AssetFolder}/{publicId}"
+            };
+
+            var result = await Task.Run(() => _cloudinary.Upload(rawParams), cancellationToken)
+                .ConfigureAwait(false);
+            if (result.Error is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Cloudinary upload failed: {result.Error.Message}");
+            }
+
+            var url = result.SecureUrl?.AbsoluteUri ?? result.Url?.AbsoluteUri;
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                throw new InvalidOperationException("Cloudinary returned no URL for the document.");
+            }
+
+            return url;
+        }
+
+        var uploadParams = new ImageUploadParams
+        {
+            File = new FileDescription(safeName, stream),
+            AssetFolder = AssetFolder,
+            Folder = AssetFolder,
+            PublicId = publicId,
+            UseAssetFolderAsPublicIdPrefix = true
+        };
+
+        var imageResult = await _cloudinary.UploadAsync(uploadParams);
+        if (imageResult.Error is not null)
+        {
+            throw new InvalidOperationException(
+                $"Cloudinary upload failed: {imageResult.Error.Message}");
+        }
+
+        var secure = imageResult.SecureUrl?.AbsoluteUri ?? imageResult.Url?.AbsoluteUri;
+        if (string.IsNullOrWhiteSpace(secure))
+        {
+            throw new InvalidOperationException("Cloudinary returned no URL for the image.");
+        }
+
+        return secure;
     }
 
     public string? ResolveImageUrl(string? storedValue)

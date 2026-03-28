@@ -32,6 +32,8 @@ builder.Services.AddScoped<IPatientReadService, InMemoryPatientReadService>();
 builder.Services.AddScoped<IPatientDataService, SqlPatientDataService>();
 builder.Services.AddScoped<IPatientVitalsService, SqlPatientVitalsService>();
 builder.Services.AddScoped<IReferenceTypeService, SqlReferenceTypeService>();
+builder.Services.AddScoped<IRecordTypeService, SqlRecordTypeService>();
+builder.Services.AddScoped<IPatientMedicalRecordService, SqlPatientMedicalRecordService>();
 builder.Services.AddScoped<IImageStorageService, CloudinaryImageStorageService>();
 builder.Services.AddScoped<IPatientAppointmentService, SqlPatientAppointmentService>();
 builder.Services.AddScoped<IInvoiceService, SqlInvoiceService>();
