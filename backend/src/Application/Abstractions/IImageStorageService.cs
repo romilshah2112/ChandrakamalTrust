@@ -18,4 +18,11 @@ public interface IImageStorageService
     string? ResolveImageUrl(string? storedValue);
 
     string? NormalizeStoredValue(string? value);
+
+    /// <summary>
+    /// Returns a Cloudinary signed URL for the given stored file URL.
+    /// Signed URLs bypass "Strict CDN Security" or other access restrictions
+    /// on the Cloudinary account and are valid for <paramref name="expiresInSeconds"/>.
+    /// </summary>
+    string GenerateSignedUrl(string fileUrl, int expiresInSeconds = 3600);
 }

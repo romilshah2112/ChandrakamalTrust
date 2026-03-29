@@ -213,6 +213,51 @@ public sealed class CloudinaryImageStorageService : IImageStorageService
         return trimmed;
     }
 
+    /// <inheritdoc/>
+    public string GenerateSignedUrl(string fileUrl, int expiresInSeconds = 3600)
+    {
+        // Determine whether this is a raw or image resource by examining the URL path.
+        bool isRaw = fileUrl.Contains("/raw/upload/", StringComparison.OrdinalIgnoreCase);
+        string uploadMarker = isRaw ? "/raw/upload/" : "/image/upload/";
+
+        var markerIdx = fileUrl.IndexOf(uploadMarker, StringComparison.OrdinalIgnoreCase);
+        if (markerIdx < 0)
+        {
+            // Not a recognised Cloudinary URL — return as-is and let the caller handle failures.
+            return fileUrl;
+        }
+
+        // Everything after "/raw/upload/" or "/image/upload/"
+        var afterMarker = fileUrl[(markerIdx + uploadMarker.Length)..];
+
+        // Strip optional version segment: "v1234567890/"
+        string publicId;
+        var firstSlash = afterMarker.IndexOf('/');
+        if (firstSlash > 1
+            && afterMarker[0] == 'v'
+            && afterMarker[1..firstSlash].All(char.IsDigit))
+        {
+            publicId = afterMarker[(firstSlash + 1)..];
+        }
+        else
+        {
+            publicId = afterMarker;
+        }
+
+        if (string.IsNullOrWhiteSpace(publicId))
+        {
+            return fileUrl;
+        }
+
+        // Build a signed URL valid for expiresInSeconds using the Cloudinary SDK.
+        // The SDK automatically computes the signature from the API secret.
+        return _cloudinary.Api.Url
+            .ResourceType(isRaw ? "raw" : "image")
+            .Action("upload")
+            .Signed(true)
+            .BuildUrl(publicId);
+    }
+
     private static string BuildPublicId(string fileNameWithoutExtension)
     {
         // New uploads use the OptimaHealthcare folder and generated patient-* ids.

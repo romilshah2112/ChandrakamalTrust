@@ -151,11 +151,15 @@ public sealed class PatientMedicalRecordsController : ControllerBase
         var fileUrl = await _medicalRecordService.GetFileUrlAsync(recordId, patientDataId, cancellationToken);
         if (string.IsNullOrWhiteSpace(fileUrl)) return NotFound();
 
+        // Generate a Cloudinary-signed URL so that accounts with
+        // Strict CDN Security enabled accept the request (unsigned URLs return 401).
+        var signedUrl = _imageStorage.GenerateSignedUrl(fileUrl);
+
         using var httpClient = new HttpClient();
         HttpResponseMessage response;
         try
         {
-            response = await httpClient.GetAsync(fileUrl, cancellationToken);
+            response = await httpClient.GetAsync(signedUrl, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -164,7 +168,9 @@ public sealed class PatientMedicalRecordsController : ControllerBase
 
         if (!response.IsSuccessStatusCode)
         {
-            return StatusCode((int)response.StatusCode, "Document storage returned an error.");
+            return StatusCode(
+                (int)response.StatusCode,
+                $"Document storage returned {(int)response.StatusCode}. Signed URL may have expired or the resource no longer exists.");
         }
 
         var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
