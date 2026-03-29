@@ -12,6 +12,7 @@ public sealed class CloudinaryImageStorageService : IImageStorageService
     private const string AssetFolder = "OptimaHealthcare";
     private readonly Cloudinary _cloudinary;
     private readonly string _cloudName;
+    private readonly string _apiSecret;
 
     public CloudinaryImageStorageService(IConfiguration configuration)
     {
@@ -28,6 +29,7 @@ public sealed class CloudinaryImageStorageService : IImageStorageService
         }
 
         _cloudName = cloudName;
+        _apiSecret = apiSecret;
         _cloudinary = new Cloudinary(new Account(cloudName, apiKey, apiSecret));
     }
 
@@ -223,8 +225,7 @@ public sealed class CloudinaryImageStorageService : IImageStorageService
         var markerIdx = fileUrl.IndexOf(uploadMarker, StringComparison.OrdinalIgnoreCase);
         if (markerIdx < 0)
         {
-            // Not a recognised Cloudinary URL — return as-is and let the caller handle failures.
-            return fileUrl;
+            return fileUrl; // Not a recognisable Cloudinary URL — return as-is.
         }
 
         // Everything after "/raw/upload/" or "/image/upload/"
@@ -249,13 +250,19 @@ public sealed class CloudinaryImageStorageService : IImageStorageService
             return fileUrl;
         }
 
-        // Build a signed URL valid for expiresInSeconds using the Cloudinary SDK.
-        // The SDK automatically computes the signature from the API secret.
-        return _cloudinary.Api.Url
-            .ResourceType(isRaw ? "raw" : "image")
-            .Action("upload")
-            .Signed(true)
-            .BuildUrl(publicId);
+        // CloudinaryDotNet 1.26.2 signs URLs with SHA-1, but accounts created /
+        // updated after 2020 require SHA-256.  Compute the signature manually
+        // using SHA-256 to match Cloudinary's documented algorithm:
+        //   signature = base64url( SHA256( public_id + api_secret ) )[0..8]
+        var toSign = System.Text.Encoding.UTF8.GetBytes(publicId + _apiSecret);
+        var hash = System.Security.Cryptography.SHA256.HashData(toSign);
+
+        // URL-safe base64, no padding, first 8 characters only.
+        var sig = Convert.ToBase64String(hash)
+            .Replace('+', '-').Replace('/', '_').TrimEnd('=')[..8];
+
+        var resourceType = isRaw ? "raw" : "image";
+        return $"https://res.cloudinary.com/{_cloudName}/{resourceType}/upload/s--{sig}--/{publicId}";
     }
 
     private static string BuildPublicId(string fileNameWithoutExtension)

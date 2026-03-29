@@ -168,9 +168,11 @@ public sealed class PatientMedicalRecordsController : ControllerBase
 
         if (!response.IsSuccessStatusCode)
         {
+            // Always return 502 (not Cloudinary's own status) so the caller can
+            // distinguish a Cloudinary error from our API's own 401/403.
             return StatusCode(
-                (int)response.StatusCode,
-                $"Document storage returned {(int)response.StatusCode}. Signed URL may have expired or the resource no longer exists.");
+                StatusCodes.Status502BadGateway,
+                $"Cloudinary returned {(int)response.StatusCode}. The file may be inaccessible or the signed URL is invalid.");
         }
 
         var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);

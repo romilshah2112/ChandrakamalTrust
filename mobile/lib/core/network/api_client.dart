@@ -440,6 +440,42 @@ class ApiClient {
     );
   }
 
+  /// Fetches the raw file bytes for a medical record via our API proxy.
+  /// The API fetches the file from Cloudinary server-side, avoiding any
+  /// client-side authentication / CORS issues with Cloudinary direct URLs.
+  Future<List<int>> downloadMedicalRecordFile({
+    required String accessToken,
+    required int patientDataId,
+    required int recordId,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/patient-data/$patientDataId/medical-records/$recordId/file',
+    );
+    final response = await _httpClient.get(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 200) {
+      return response.bodyBytes;
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException('You are not allowed to view this document.');
+    }
+
+    if (response.statusCode == 404) {
+      throw const AuthException('Document not found.');
+    }
+
+    final body = response.body.trim();
+    throw AuthException(
+      body.isNotEmpty
+          ? body
+          : 'Could not fetch document: HTTP ${response.statusCode}',
+    );
+  }
+
   Future<List<PatientVitalsModel>> listPatientVitals({
     required String accessToken,
     required int patientDataId,
