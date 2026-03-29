@@ -114,6 +114,91 @@ WHERE [lPatientMedicalRecordId] = @recordId
         return result is null or DBNull ? null : result.ToString();
     }
 
+    public async Task<bool> UpdateAsync(
+        int recordId,
+        int patientDataId,
+        UpdatePatientMedicalRecordRequest request,
+        CancellationToken cancellationToken)
+    {
+        var reportUtc = request.ReportDate.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(request.ReportDate, DateTimeKind.Utc)
+            : request.ReportDate.ToUniversalTime();
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        const string sql = @"
+UPDATE [PatientMedicalRecord]
+SET [lRecordTypeId] = @recordTypeId,
+    [RecordName] = @recordName,
+    [ReportDate] = @reportDate,
+    [Comments] = @comments
+WHERE [lPatientMedicalRecordId] = @recordId
+  AND [lPatientDataId] = @patientDataId
+  AND [IsActive] = 1";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@recordId", recordId);
+        command.Parameters.AddWithValue("@patientDataId", patientDataId);
+        command.Parameters.AddWithValue("@recordTypeId", request.RecordTypeId);
+        command.Parameters.AddWithValue("@recordName", request.RecordName.Trim());
+        command.Parameters.AddWithValue("@reportDate", reportUtc);
+        command.Parameters.AddWithValue("@comments", (object?)request.Comments?.Trim() ?? DBNull.Value);
+
+        var affected = await command.ExecuteNonQueryAsync(cancellationToken);
+        return affected > 0;
+    }
+
+    public async Task<string?> DeleteAsync(
+        int recordId,
+        int patientDataId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        const string selectSql = @"
+SELECT TOP 1 [FileURL]
+FROM [PatientMedicalRecord]
+WHERE [lPatientMedicalRecordId] = @recordId
+  AND [lPatientDataId] = @patientDataId
+  AND [IsActive] = 1";
+
+        await using var selectCommand = new SqlCommand(selectSql, connection, (SqlTransaction)transaction);
+        selectCommand.Parameters.AddWithValue("@recordId", recordId);
+        selectCommand.Parameters.AddWithValue("@patientDataId", patientDataId);
+
+        var fileUrl = await selectCommand.ExecuteScalarAsync(cancellationToken);
+        if (fileUrl is null or DBNull)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return null;
+        }
+
+        const string updateSql = @"
+UPDATE [PatientMedicalRecord]
+SET [IsActive] = 0
+WHERE [lPatientMedicalRecordId] = @recordId
+  AND [lPatientDataId] = @patientDataId
+  AND [IsActive] = 1";
+
+        await using var updateCommand = new SqlCommand(updateSql, connection, (SqlTransaction)transaction);
+        updateCommand.Parameters.AddWithValue("@recordId", recordId);
+        updateCommand.Parameters.AddWithValue("@patientDataId", patientDataId);
+
+        var affected = await updateCommand.ExecuteNonQueryAsync(cancellationToken);
+        if (affected <= 0)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return null;
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return fileUrl.ToString();
+    }
+
     private static PatientMedicalRecordDto Map(SqlDataReader reader)
     {
         return new PatientMedicalRecordDto

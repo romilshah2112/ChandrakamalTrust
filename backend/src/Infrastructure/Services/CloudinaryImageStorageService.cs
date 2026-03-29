@@ -10,9 +10,9 @@ public sealed class CloudinaryImageStorageService : IImageStorageService
     private const int MaxBytes = 50 * 1024;
     private const int MaxMedicalDocumentBytes = 20 * 1024 * 1024;
     private const string AssetFolder = "OptimaHealthcare";
+    private const string MedicalRecordsFolder = $"{AssetFolder}/Records";
+
     private readonly Cloudinary _cloudinary;
-    private readonly string _cloudName;
-    private readonly string _apiSecret;
 
     public CloudinaryImageStorageService(IConfiguration configuration)
     {
@@ -28,8 +28,6 @@ public sealed class CloudinaryImageStorageService : IImageStorageService
             throw new InvalidOperationException("Cloudinary configuration is missing.");
         }
 
-        _cloudName = cloudName;
-        _apiSecret = apiSecret;
         _cloudinary = new Cloudinary(new Account(cloudName, apiKey, apiSecret));
     }
 
@@ -114,39 +112,19 @@ public sealed class CloudinaryImageStorageService : IImageStorageService
 
         await using var stream = new MemoryStream(bytes, writable: false);
 
-        if (isPdf)
-        {
-            var rawParams = new RawUploadParams
-            {
-                File = new FileDescription(safeName, stream),
-                PublicId = $"{AssetFolder}/{publicId}"
-            };
-
-            var result = await Task.Run(() => _cloudinary.Upload(rawParams), cancellationToken)
-                .ConfigureAwait(false);
-            if (result.Error is not null)
-            {
-                throw new InvalidOperationException(
-                    $"Cloudinary upload failed: {result.Error.Message}");
-            }
-
-            var url = result.SecureUrl?.AbsoluteUri ?? result.Url?.AbsoluteUri;
-            if (string.IsNullOrWhiteSpace(url))
-            {
-                throw new InvalidOperationException("Cloudinary returned no URL for the document.");
-            }
-
-            return url;
-        }
-
         var uploadParams = new ImageUploadParams
         {
             File = new FileDescription(safeName, stream),
-            AssetFolder = AssetFolder,
-            Folder = AssetFolder,
+            AssetFolder = MedicalRecordsFolder,
+            Folder = MedicalRecordsFolder,
             PublicId = publicId,
             UseAssetFolderAsPublicIdPrefix = true
         };
+
+        if (isPdf)
+        {
+            uploadParams.Format = "pdf";
+        }
 
         var imageResult = await _cloudinary.UploadAsync(uploadParams);
         if (imageResult.Error is not null)
@@ -215,60 +193,139 @@ public sealed class CloudinaryImageStorageService : IImageStorageService
         return trimmed;
     }
 
-    /// <inheritdoc/>
     public string GenerateSignedUrl(string fileUrl, int expiresInSeconds = 3600)
     {
-        // Determine whether this is a raw or image resource by examining the URL path.
-        bool isRaw = fileUrl.Contains("/raw/upload/", StringComparison.OrdinalIgnoreCase);
-        string uploadMarker = isRaw ? "/raw/upload/" : "/image/upload/";
+        return GenerateSignedUrlCandidates(fileUrl, expiresInSeconds).FirstOrDefault() ?? fileUrl;
+    }
 
-        var markerIdx = fileUrl.IndexOf(uploadMarker, StringComparison.OrdinalIgnoreCase);
-        if (markerIdx < 0)
+    public IReadOnlyList<string> GenerateSignedUrlCandidates(string fileUrl, int expiresInSeconds = 3600)
+    {
+        var asset = TryParseCloudinaryAsset(fileUrl);
+        if (asset is null)
         {
-            return fileUrl; // Not a recognisable Cloudinary URL — return as-is.
+            return [fileUrl];
         }
 
-        // Everything after "/raw/upload/" or "/image/upload/"
-        var afterMarker = fileUrl[(markerIdx + uploadMarker.Length)..];
+        var urls = new List<string>();
 
-        // Strip optional version segment: "v1234567890/"
-        string publicId;
-        var firstSlash = afterMarker.IndexOf('/');
-        if (firstSlash > 1
-            && afterMarker[0] == 'v'
-            && afterMarker[1..firstSlash].All(char.IsDigit))
+        var url = _cloudinary.Api.UrlImgUp
+            .ResourceType(asset.ResourceType)
+            .Secure(true)
+            .Signed(true)
+            .LongUrlSignature(true);
+
+        if (!string.IsNullOrWhiteSpace(asset.Format))
         {
-            publicId = afterMarker[(firstSlash + 1)..];
-        }
-        else
-        {
-            publicId = afterMarker;
+            url = url.Format(asset.Format);
         }
 
-        if (string.IsNullOrWhiteSpace(publicId))
+        urls.Add(url.BuildUrl(asset.PublicId));
+
+        if (asset.ResourceType.Equals("image", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(asset.Format))
         {
-            return fileUrl;
+            var legacyUrl = _cloudinary.Api.UrlImgUp
+                .ResourceType(asset.ResourceType)
+                .Secure(true)
+                .Signed(true)
+                .LongUrlSignature(true)
+                .BuildUrl($"{asset.PublicId}.{asset.Format}");
+
+            if (!urls.Contains(legacyUrl, StringComparer.OrdinalIgnoreCase))
+            {
+                urls.Add(legacyUrl);
+            }
         }
 
-        // CloudinaryDotNet 1.26.2 signs URLs with SHA-1, but accounts created /
-        // updated after 2020 require SHA-256.  Compute the signature manually
-        // using SHA-256 to match Cloudinary's documented algorithm:
-        //   signature = base64url( SHA256( public_id + api_secret ) )[0..8]
-        var toSign = System.Text.Encoding.UTF8.GetBytes(publicId + _apiSecret);
-        var hash = System.Security.Cryptography.SHA256.HashData(toSign);
+        if (!urls.Contains(fileUrl, StringComparer.OrdinalIgnoreCase))
+        {
+            urls.Add(fileUrl);
+        }
 
-        // URL-safe base64, no padding, first 8 characters only.
-        var sig = Convert.ToBase64String(hash)
-            .Replace('+', '-').Replace('/', '_').TrimEnd('=')[..8];
+        return urls;
+    }
 
-        var resourceType = isRaw ? "raw" : "image";
-        return $"https://res.cloudinary.com/{_cloudName}/{resourceType}/upload/s--{sig}--/{publicId}";
+    public async Task DeleteFileAsync(string fileUrl, CancellationToken cancellationToken)
+    {
+        var asset = TryParseCloudinaryAsset(fileUrl);
+        if (asset is null)
+        {
+            return;
+        }
+
+        var result = await _cloudinary.DestroyAsync(new DeletionParams(asset.PublicId)
+        {
+            ResourceType = ResolveDeletionResourceType(asset.ResourceType),
+            Type = "upload",
+            Invalidate = true
+        });
+
+        if (result.Error is not null)
+        {
+            throw new InvalidOperationException(
+                $"Cloudinary delete failed: {result.Error.Message}");
+        }
+    }
+
+    private static CloudinaryAssetInfo? TryParseCloudinaryAsset(string? fileUrl)
+    {
+        var trimmed = fileUrl?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) ||
+            !Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        var segments = uri.AbsolutePath
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var uploadIndex = Array.FindIndex(segments, segment =>
+            segment.Equals("upload", StringComparison.OrdinalIgnoreCase));
+
+        if (uploadIndex <= 0 || uploadIndex >= segments.Length - 1)
+        {
+            return null;
+        }
+
+        var publicIdSegments = segments[(uploadIndex + 1)..];
+        if (publicIdSegments.Length == 0)
+        {
+            return null;
+        }
+
+        if (publicIdSegments[0].Length > 1 &&
+            publicIdSegments[0][0] == 'v' &&
+            publicIdSegments[0][1..].All(char.IsDigit))
+        {
+            publicIdSegments = publicIdSegments[1..];
+        }
+
+        if (publicIdSegments.Length == 0)
+        {
+            return null;
+        }
+
+        var resourceType = segments[uploadIndex - 1];
+        string? format = null;
+
+        if (resourceType.Equals("image", StringComparison.OrdinalIgnoreCase))
+        {
+            var lastSegment = publicIdSegments[^1];
+            var extension = Path.GetExtension(lastSegment);
+            if (!string.IsNullOrWhiteSpace(extension))
+            {
+                format = extension.TrimStart('.').ToLowerInvariant();
+                publicIdSegments[^1] = Path.GetFileNameWithoutExtension(lastSegment);
+            }
+        }
+
+        return new CloudinaryAssetInfo(
+            resourceType,
+            string.Join('/', publicIdSegments),
+            format);
     }
 
     private static string BuildPublicId(string fileNameWithoutExtension)
     {
-        // New uploads use the OptimaHealthcare folder and generated patient-* ids.
-        // Older database rows contain legacy names that live at the Cloudinary root.
         return fileNameWithoutExtension.StartsWith("patient-", StringComparison.OrdinalIgnoreCase)
             || fileNameWithoutExtension.StartsWith("profile-", StringComparison.OrdinalIgnoreCase)
             ? $"{AssetFolder}/{fileNameWithoutExtension}"
@@ -283,4 +340,13 @@ public sealed class CloudinaryImageStorageService : IImageStorageService
             ? "profile"
             : "patient";
     }
+
+    private static ResourceType ResolveDeletionResourceType(string resourceType)
+    {
+        return resourceType.Equals("raw", StringComparison.OrdinalIgnoreCase)
+            ? ResourceType.Raw
+            : ResourceType.Image;
+    }
+
+    private sealed record CloudinaryAssetInfo(string ResourceType, string PublicId, string? Format);
 }

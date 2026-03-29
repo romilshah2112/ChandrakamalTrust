@@ -17,15 +17,18 @@ public sealed class PatientMedicalRecordsController : ControllerBase
 
     private readonly IPatientDataService _patientDataService;
     private readonly IPatientMedicalRecordService _medicalRecordService;
+    private readonly IPatientRecordDetailService _patientRecordDetailService;
     private readonly IImageStorageService _imageStorage;
 
     public PatientMedicalRecordsController(
         IPatientDataService patientDataService,
         IPatientMedicalRecordService medicalRecordService,
+        IPatientRecordDetailService patientRecordDetailService,
         IImageStorageService imageStorage)
     {
         _patientDataService = patientDataService;
         _medicalRecordService = medicalRecordService;
+        _patientRecordDetailService = patientRecordDetailService;
         _imageStorage = imageStorage;
     }
 
@@ -151,35 +154,205 @@ public sealed class PatientMedicalRecordsController : ControllerBase
         var fileUrl = await _medicalRecordService.GetFileUrlAsync(recordId, patientDataId, cancellationToken);
         if (string.IsNullOrWhiteSpace(fileUrl)) return NotFound();
 
-        // Generate a Cloudinary-signed URL so that accounts with
-        // Strict CDN Security enabled accept the request (unsigned URLs return 401).
-        var signedUrl = _imageStorage.GenerateSignedUrl(fileUrl);
-
         using var httpClient = new HttpClient();
-        HttpResponseMessage response;
+        HttpResponseMessage? response = null;
+        string? failureDetail = null;
+
+        foreach (var candidateUrl in _imageStorage.GenerateSignedUrlCandidates(fileUrl))
+        {
+            try
+            {
+                response = await httpClient.GetAsync(candidateUrl, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                failureDetail = ex.Message;
+                continue;
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+                var contentType = response.Content.Headers.ContentType?.MediaType
+                                  ?? (fileUrl.Contains(".pdf", StringComparison.OrdinalIgnoreCase)
+                                      ? "application/pdf"
+                                      : "image/jpeg");
+
+                return File(bytes, contentType);
+            }
+
+            failureDetail = await response.Content.ReadAsStringAsync(cancellationToken);
+        }
+
+        var statusCode = response?.StatusCode is not null
+            ? (int)response.StatusCode
+            : StatusCodes.Status502BadGateway;
+
+        return StatusCode(
+            StatusCodes.Status502BadGateway,
+            $"Cloudinary returned {statusCode}. {failureDetail ?? "The file may be inaccessible or the signed URL is invalid."}");
+    }
+
+    [HttpGet("api/v1/patient-data/{patientDataId:int}/medical-records/{recordId:int}/ocr-preview")]
+    [ProducesResponseType(typeof(IReadOnlyList<PatientRecordDetailDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<IReadOnlyList<PatientRecordDetailDto>>> OcrPreview(
+        int patientDataId,
+        int recordId,
+        CancellationToken cancellationToken)
+    {
+        if (!IsStaffUser())
+        {
+            return Forbid();
+        }
+
+        var patient = await _patientDataService.GetByIdAsync(patientDataId, cancellationToken);
+        if (patient is null)
+        {
+            return NotFound();
+        }
+
+        var existingDetails = await _patientRecordDetailService.ListByMedicalRecordAsync(
+            recordId,
+            cancellationToken);
+        if (existingDetails.Count > 0)
+        {
+            return Ok(existingDetails);
+        }
+
+        var fileBytesResult = await TryGetStoredFileBytesAsync(patientDataId, recordId, cancellationToken);
+        if (!fileBytesResult.Success)
+        {
+            return StatusCode(fileBytesResult.StatusCode, fileBytesResult.ErrorMessage);
+        }
+
         try
         {
-            response = await httpClient.GetAsync(signedUrl, cancellationToken);
+            var details = await _patientRecordDetailService.ExtractPreviewAsync(
+                fileBytesResult.Bytes!,
+                fileBytesResult.ContentType ?? "application/octet-stream",
+                $"{patient.FirstName} {patient.LastName}".Trim(),
+                DateTime.UtcNow,
+                cancellationToken);
+            return Ok(details);
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            return StatusCode(StatusCodes.Status502BadGateway, $"Could not fetch document: {ex.Message}");
+            return BadRequest(ex.Message);
         }
+    }
 
-        if (!response.IsSuccessStatusCode)
+    [HttpPost("api/v1/patient-data/{patientDataId:int}/medical-records/{recordId:int}/details")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult> SaveDetails(
+        int patientDataId,
+        int recordId,
+        [FromBody] SavePatientRecordDetailsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!IsStaffUser())
         {
-            // Always return 502 (not Cloudinary's own status) so the caller can
-            // distinguish a Cloudinary error from our API's own 401/403.
-            return StatusCode(
-                StatusCodes.Status502BadGateway,
-                $"Cloudinary returned {(int)response.StatusCode}. The file may be inaccessible or the signed URL is invalid.");
+            return Forbid();
         }
 
-        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
-        var contentType = response.Content.Headers.ContentType?.MediaType
-                          ?? (fileUrl.Contains("/image/") ? "image/jpeg" : "application/pdf");
+        var fileUrl = await _medicalRecordService.GetFileUrlAsync(recordId, patientDataId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(fileUrl))
+        {
+            return NotFound();
+        }
 
-        return File(bytes, contentType);
+        if (request.Details is null)
+        {
+            return BadRequest("Details payload is required.");
+        }
+
+        await _patientRecordDetailService.SaveAsync(
+            recordId,
+            request.PatientNameInRecord,
+            request.Details,
+            cancellationToken);
+
+        return NoContent();
+    }
+
+    [HttpPut("api/v1/patient-data/{patientDataId:int}/medical-records/{recordId:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult> Update(
+        int patientDataId,
+        int recordId,
+        [FromBody] UpdatePatientMedicalRecordRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!IsStaffUser())
+        {
+            return Forbid();
+        }
+
+        if (patientDataId <= 0 || recordId <= 0)
+        {
+            return BadRequest("Patient and record ids are required.");
+        }
+
+        if (request.RecordTypeId <= 0 || string.IsNullOrWhiteSpace(request.RecordName))
+        {
+            return BadRequest("Record type and record name are required.");
+        }
+
+        if (request.ReportDate == default)
+        {
+            return BadRequest("Report date is required.");
+        }
+
+        var updated = await _medicalRecordService.UpdateAsync(
+            recordId,
+            patientDataId,
+            request,
+            cancellationToken);
+
+        if (!updated)
+        {
+            return NotFound("Medical record not found.");
+        }
+
+        return NoContent();
+    }
+
+    [HttpDelete("api/v1/patient-data/{patientDataId:int}/medical-records/{recordId:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult> Delete(
+        int patientDataId,
+        int recordId,
+        CancellationToken cancellationToken)
+    {
+        if (!IsStaffUser())
+        {
+            return Forbid();
+        }
+
+        var fileUrl = await _medicalRecordService.DeleteAsync(recordId, patientDataId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(fileUrl))
+        {
+            return NotFound("Medical record not found.");
+        }
+
+        try
+        {
+            await _imageStorage.DeleteFileAsync(fileUrl, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
+        }
+
+        return NoContent();
     }
 
     private bool IsStaffUser()
@@ -187,5 +360,58 @@ public sealed class PatientMedicalRecordsController : ControllerBase
         var role = User.GetRoleName();
         return StaffRoles.Any(allowedRole =>
             role.Contains(allowedRole, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task<(bool Success, byte[]? Bytes, string? ContentType, int StatusCode, string? ErrorMessage)>
+        TryGetStoredFileBytesAsync(
+            int patientDataId,
+            int recordId,
+            CancellationToken cancellationToken)
+    {
+        var fileUrl = await _medicalRecordService.GetFileUrlAsync(recordId, patientDataId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(fileUrl))
+        {
+            return (false, null, null, StatusCodes.Status404NotFound, "Document not found.");
+        }
+
+        using var httpClient = new HttpClient();
+        HttpResponseMessage? response = null;
+        string? failureDetail = null;
+
+        foreach (var candidateUrl in _imageStorage.GenerateSignedUrlCandidates(fileUrl))
+        {
+            try
+            {
+                response = await httpClient.GetAsync(candidateUrl, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                failureDetail = ex.Message;
+                continue;
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+                var contentType = response.Content.Headers.ContentType?.MediaType
+                                  ?? (fileUrl.Contains(".pdf", StringComparison.OrdinalIgnoreCase)
+                                      ? "application/pdf"
+                                      : "image/jpeg");
+                return (true, bytes, contentType, StatusCodes.Status200OK, null);
+            }
+
+            failureDetail = await response.Content.ReadAsStringAsync(cancellationToken);
+        }
+
+        var statusCode = response?.StatusCode is not null
+            ? (int)response.StatusCode
+            : StatusCodes.Status502BadGateway;
+
+        return (
+            false,
+            null,
+            null,
+            StatusCodes.Status502BadGateway,
+            $"Cloudinary returned {statusCode}. {failureDetail ?? "The file may be inaccessible or the signed URL is invalid."}");
     }
 }

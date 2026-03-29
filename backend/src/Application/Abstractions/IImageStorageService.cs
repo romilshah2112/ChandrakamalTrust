@@ -25,4 +25,8 @@ public interface IImageStorageService
     /// on the Cloudinary account and are valid for <paramref name="expiresInSeconds"/>.
     /// </summary>
     string GenerateSignedUrl(string fileUrl, int expiresInSeconds = 3600);
+
+    IReadOnlyList<string> GenerateSignedUrlCandidates(string fileUrl, int expiresInSeconds = 3600);
+
+    Task DeleteFileAsync(string fileUrl, CancellationToken cancellationToken);
 }

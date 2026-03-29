@@ -6,7 +6,10 @@ import 'package:optima_healthcare_mobile/features/patients/models/patient_data_u
 import 'package:optima_healthcare_mobile/features/patients/models/patient_detail.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_list_item.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_medical_record_model.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/patient_record_detail_model.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/record_keyword_lookup_model.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/save_patient_medical_record_request.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/update_patient_medical_record_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_vitals_model.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_vitals_save_request.dart';
 
@@ -53,6 +56,80 @@ class PatientRepository {
       accessToken: accessToken,
       patientDataId: patientDataId,
       request: request,
+    );
+  }
+
+  Future<void> updatePatientMedicalRecord({
+    required String accessToken,
+    required int patientDataId,
+    required int recordId,
+    required UpdatePatientMedicalRecordRequestModel request,
+  }) {
+    return _apiClient.updatePatientMedicalRecord(
+      accessToken: accessToken,
+      patientDataId: patientDataId,
+      recordId: recordId,
+      request: request,
+    );
+  }
+
+  Future<void> deletePatientMedicalRecord({
+    required String accessToken,
+    required int patientDataId,
+    required int recordId,
+  }) {
+    return _apiClient.deletePatientMedicalRecord(
+      accessToken: accessToken,
+      patientDataId: patientDataId,
+      recordId: recordId,
+    );
+  }
+
+  Future<List<int>> downloadMedicalRecordFile({
+    required String accessToken,
+    required int patientDataId,
+    required int recordId,
+  }) {
+    return _apiClient.downloadMedicalRecordFile(
+      accessToken: accessToken,
+      patientDataId: patientDataId,
+      recordId: recordId,
+    );
+  }
+
+  Future<List<PatientRecordDetailModel>> listPatientRecordDetails({
+    required String accessToken,
+    required int patientDataId,
+    required int recordId,
+  }) {
+    return _apiClient.listPatientRecordDetails(
+      accessToken: accessToken,
+      patientDataId: patientDataId,
+      recordId: recordId,
+    );
+  }
+
+  Future<List<RecordKeywordLookupModel>> getRecordKeywords({
+    required String accessToken,
+  }) {
+    return _apiClient.getRecordKeywords(accessToken: accessToken);
+  }
+
+  Future<void> savePatientRecordDetails({
+    required String accessToken,
+    required int patientDataId,
+    required int recordId,
+    required String patientNameInRecord,
+    required List<PatientRecordDetailModel> details,
+    required String reportDateTime,
+  }) {
+    return _apiClient.savePatientRecordDetails(
+      accessToken: accessToken,
+      patientDataId: patientDataId,
+      recordId: recordId,
+      patientNameInRecord: patientNameInRecord,
+      details: details,
+      reportDateTime: reportDateTime,
     );
   }
 

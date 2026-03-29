@@ -9,7 +9,8 @@ import 'package:optima_healthcare_mobile/features/auth/models/auth_session.dart'
 import 'package:optima_healthcare_mobile/features/patients/data/patient_repository.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_medical_record_model.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/save_patient_medical_record_request.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/update_patient_medical_record_request.dart';
+import 'package:optima_healthcare_mobile/features/patients/presentation/document_viewer_page.dart';
 
 class PatientMedicalRecordsPage extends StatefulWidget {
   const PatientMedicalRecordsPage({
@@ -37,7 +38,6 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
   bool _loading = true;
   String? _error;
   List<PatientMedicalRecordModel> _records = const [];
-  int? _downloadingId;
 
   @override
   void initState() {
@@ -92,43 +92,13 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
     }
   }
 
-  /// Inserts Cloudinary's fl_attachment flag (optionally with filename) so the
-  /// browser prompts a file download rather than trying to render the URL.
-  String _makeDownloadUrl(String url, String recordName) {
-    const marker = '/upload/';
-    final idx = url.indexOf(marker);
-    if (idx == -1) return url;
-    final insertAt = idx + marker.length;
-    // Sanitise the suggested file name (Cloudinary rejects spaces/special chars)
-    final safeName = recordName
-        .replaceAll(RegExp(r'[^\w.\-]'), '_')
-        .replaceAll(RegExp(r'_+'), '_');
-    final flag = 'fl_attachment:$safeName';
-    return '${url.substring(0, insertAt)}$flag/${url.substring(insertAt)}';
-  }
-
-  Future<void> _downloadDocument(PatientMedicalRecordModel r) async {
-    final uri = Uri.tryParse(_makeDownloadUrl(r.fileUrl.trim(), r.recordName));
-    if (uri == null || !uri.hasScheme) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid document link.')),
-        );
-      }
-      return;
-    }
-
-    setState(() => _downloadingId = r.id);
-    try {
-      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!ok && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open document.')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _downloadingId = null);
-    }
+  void _openViewer(PatientMedicalRecordModel r) {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => DocumentViewerPage(record: r),
+      ),
+    );
   }
 
   String _formatIsoDate(String iso) {
@@ -439,6 +409,268 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
     }
   }
 
+  Future<void> _editRecord(PatientMedicalRecordModel record) async {
+    final token = AuthSession.accessToken;
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Session expired.')),
+      );
+      return;
+    }
+
+    List<LookupOptionModel> recordTypes = const [];
+    try {
+      recordTypes = await _repo.getRecordTypes(accessToken: token);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not load record types. Try again.')),
+      );
+      return;
+    }
+
+    if (!mounted || recordTypes.isEmpty) return;
+
+    final formKey = GlobalKey<FormState>();
+    final recordNameCtrl = TextEditingController(text: record.recordName);
+    final commentsCtrl = TextEditingController(text: record.comments ?? '');
+    var selectedTypeId = record.recordTypeId;
+    var reportDate = DateTime.tryParse(record.reportDate)?.toLocal() ?? DateTime.now();
+    var saving = false;
+    String? dialogError;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialog) {
+            Future<void> pickReportDate() async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: reportDate,
+                firstDate: DateTime(1900),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+              );
+              if (picked != null) {
+                setDialog(() => reportDate = picked);
+              }
+            }
+
+            Future<void> submit() async {
+              if (!formKey.currentState!.validate()) return;
+
+              setDialog(() {
+                saving = true;
+                dialogError = null;
+              });
+
+              try {
+                await _repo.updatePatientMedicalRecord(
+                  accessToken: token,
+                  patientDataId: widget.patientDataId,
+                  recordId: record.patientMedicalRecordId,
+                  request: UpdatePatientMedicalRecordRequestModel(
+                    recordTypeId: selectedTypeId,
+                    recordName: recordNameCtrl.text.trim(),
+                    reportDate: reportDate,
+                    comments: commentsCtrl.text.trim().isEmpty
+                        ? null
+                        : commentsCtrl.text.trim(),
+                  ),
+                );
+                if (!context.mounted) return;
+                Navigator.of(dialogContext).pop();
+                ScaffoldMessenger.of(this.context).showSnackBar(
+                  const SnackBar(content: Text('Document updated.')),
+                );
+                _load();
+              } on AuthException catch (e) {
+                setDialog(() {
+                  saving = false;
+                  dialogError = e.message;
+                });
+              } catch (e) {
+                setDialog(() {
+                  saving = false;
+                  dialogError = e.toString();
+                });
+              }
+            }
+
+            return AlertDialog(
+              title: const Text('Edit document'),
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DropdownButtonFormField<int>(
+                        initialValue: selectedTypeId,
+                        decoration: const InputDecoration(
+                          labelText: 'Record type',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: recordTypes
+                            .map(
+                              (rt) => DropdownMenuItem<int>(
+                                value: rt.id,
+                                child: Text(rt.name),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: saving
+                            ? null
+                            : (value) {
+                                if (value != null) {
+                                  setDialog(() => selectedTypeId = value);
+                                }
+                              },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: recordNameCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Record name',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) => (value == null || value.trim().isEmpty)
+                            ? 'Enter record name.'
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
+                      InkWell(
+                        onTap: saving ? null : pickReportDate,
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Report date',
+                            border: OutlineInputBorder(),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(_formatIsoDate(reportDate.toUtc().toIso8601String())),
+                              const Icon(Icons.calendar_today),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: commentsCtrl,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: 'Comments',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      if (dialogError != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          dialogError!,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: saving ? null : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: saving ? null : submit,
+                  child: saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    recordNameCtrl.dispose();
+    commentsCtrl.dispose();
+  }
+
+  Future<void> _deleteRecord(PatientMedicalRecordModel record) async {
+    final token = AuthSession.accessToken;
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Session expired.')),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete document'),
+        content: Text('Delete "${record.recordName}"? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await _repo.deletePatientMedicalRecord(
+        accessToken: token,
+        patientDataId: widget.patientDataId,
+        recordId: record.patientMedicalRecordId,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Document deleted.')),
+      );
+      _load();
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
+  Future<void> _handleRecordAction(
+    _MedicalRecordAction action,
+    PatientMedicalRecordModel record,
+  ) async {
+    switch (action) {
+      case _MedicalRecordAction.view:
+        _openViewer(record);
+        break;
+      case _MedicalRecordAction.edit:
+        await _editRecord(record);
+        break;
+      case _MedicalRecordAction.delete:
+        await _deleteRecord(record);
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -499,32 +731,45 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
                           itemCount: _records.length,
                           itemBuilder: (context, i) {
                             final r = _records[i];
-                            final isDownloading = _downloadingId == r.id;
+                            final path =
+                                Uri.tryParse(r.fileUrl)?.path.toLowerCase() ??
+                                    r.fileUrl.toLowerCase();
+                            final isImage = path.endsWith('.jpg') ||
+                                path.endsWith('.jpeg') ||
+                                path.endsWith('.png') ||
+                                path.endsWith('.bmp');
                             return Card(
                               child: ListTile(
+                                leading: Icon(
+                                  isImage
+                                      ? Icons.image_outlined
+                                      : Icons.picture_as_pdf_outlined,
+                                  color: isImage ? Colors.blue : Colors.red,
+                                ),
                                 title: Text(r.recordName),
                                 subtitle: Text(
                                   'Report: ${_formatIsoDate(r.reportDate)}\n'
                                   '${r.comments?.isNotEmpty == true ? r.comments! : 'No comments'}',
                                 ),
                                 isThreeLine: true,
-                                trailing: isDownloading
-                                    ? const SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : IconButton(
-                                        icon: const Icon(Icons.download),
-                                        tooltip: 'Download document',
-                                        onPressed: () =>
-                                            _downloadDocument(r),
-                                      ),
-                                onTap: isDownloading
-                                    ? null
-                                    : () => _downloadDocument(r),
+                                trailing: PopupMenuButton<_MedicalRecordAction>(
+                                  onSelected: (action) => _handleRecordAction(action, r),
+                                  itemBuilder: (context) => const [
+                                    PopupMenuItem(
+                                      value: _MedicalRecordAction.view,
+                                      child: Text('Open'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: _MedicalRecordAction.edit,
+                                      child: Text('Edit'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: _MedicalRecordAction.delete,
+                                      child: Text('Delete'),
+                                    ),
+                                  ],
+                                ),
+                                onTap: () => _openViewer(r),
                               ),
                             );
                           },
@@ -533,3 +778,5 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
     );
   }
 }
+
+enum _MedicalRecordAction { view, edit, delete }

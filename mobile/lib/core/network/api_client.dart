@@ -21,7 +21,10 @@ import 'package:optima_healthcare_mobile/features/patients/models/patient_data_u
 import 'package:optima_healthcare_mobile/features/patients/models/patient_detail.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_list_item.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_medical_record_model.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/patient_record_detail_model.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/record_keyword_lookup_model.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/save_patient_medical_record_request.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/update_patient_medical_record_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_vitals_model.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_vitals_save_request.dart';
 
@@ -440,6 +443,81 @@ class ApiClient {
     );
   }
 
+  Future<void> updatePatientMedicalRecord({
+    required String accessToken,
+    required int patientDataId,
+    required int recordId,
+    required UpdatePatientMedicalRecordRequestModel request,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/patient-data/$patientDataId/medical-records/$recordId',
+    );
+    final response = await _httpClient.put(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(request.toJson()),
+    );
+
+    if (response.statusCode == 204) {
+      return;
+    }
+
+    if (response.statusCode == 404) {
+      throw const AuthException('Medical record not found.');
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException('You are not allowed to edit medical records.');
+    }
+
+    if (response.statusCode == 400) {
+      final body = response.body.trim();
+      throw AuthException(
+        body.isEmpty ? 'Invalid medical record details.' : body,
+      );
+    }
+
+    throw AuthException(
+      'Update medical record failed: HTTP ${response.statusCode}',
+    );
+  }
+
+  Future<void> deletePatientMedicalRecord({
+    required String accessToken,
+    required int patientDataId,
+    required int recordId,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/patient-data/$patientDataId/medical-records/$recordId',
+    );
+    final response = await _httpClient.delete(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 204) {
+      return;
+    }
+
+    if (response.statusCode == 404) {
+      throw const AuthException('Medical record not found.');
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException('You are not allowed to delete medical records.');
+    }
+
+    final body = response.body.trim();
+    throw AuthException(
+      body.isNotEmpty
+          ? body
+          : 'Delete medical record failed: HTTP ${response.statusCode}',
+    );
+  }
+
   /// Fetches the raw file bytes for a medical record via our API proxy.
   /// The API fetches the file from Cloudinary server-side, avoiding any
   /// client-side authentication / CORS issues with Cloudinary direct URLs.
@@ -473,6 +551,89 @@ class ApiClient {
       body.isNotEmpty
           ? body
           : 'Could not fetch document: HTTP ${response.statusCode}',
+    );
+  }
+
+  Future<List<PatientRecordDetailModel>> listPatientRecordDetails({
+    required String accessToken,
+    required int patientDataId,
+    required int recordId,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/patient-data/$patientDataId/medical-records/$recordId/ocr-preview',
+    );
+    final response = await _httpClient.get(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map(
+            (item) => PatientRecordDetailModel.fromJson(
+              item as Map<String, dynamic>,
+            ),
+          )
+          .toList();
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException('You are not allowed to view parsed report details.');
+    }
+
+    if (response.statusCode == 404) {
+      throw const AuthException('Record details not found.');
+    }
+
+    final body = response.body.trim();
+    throw AuthException(
+      body.isNotEmpty
+          ? body
+          : 'List patient record details failed: HTTP ${response.statusCode}',
+    );
+  }
+
+  Future<void> savePatientRecordDetails({
+    required String accessToken,
+    required int patientDataId,
+    required int recordId,
+    required String patientNameInRecord,
+    required List<PatientRecordDetailModel> details,
+    required String reportDateTime,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/patient-data/$patientDataId/medical-records/$recordId/details',
+    );
+    final response = await _httpClient.post(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'patientNameInRecord': patientNameInRecord,
+        'details': details
+            .map(
+              (detail) => {
+                'recordKeywordId': detail.recordKeywordId,
+                'readingValue': detail.readingValue,
+                'reportDateTime': reportDateTime,
+              },
+            )
+            .toList(),
+      }),
+    );
+
+    if (response.statusCode == 204) {
+      return;
+    }
+
+    final body = response.body.trim();
+    throw AuthException(
+      body.isNotEmpty
+          ? body
+          : 'Save patient record details failed: HTTP ${response.statusCode}',
     );
   }
 
@@ -661,6 +822,35 @@ class ApiClient {
 
     throw AuthException(
       'Get record types failed: HTTP ${response.statusCode}',
+    );
+  }
+
+  Future<List<RecordKeywordLookupModel>> getRecordKeywords({
+    required String accessToken,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/api/v1/record-keywords');
+    final response = await _httpClient.get(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map(
+            (item) => RecordKeywordLookupModel.fromJson(
+              item as Map<String, dynamic>,
+            ),
+          )
+          .toList();
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException('You are not allowed to view record keywords.');
+    }
+
+    throw AuthException(
+      'Get record keywords failed: HTTP ${response.statusCode}',
     );
   }
 

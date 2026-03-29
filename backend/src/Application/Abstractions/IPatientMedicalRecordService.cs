@@ -18,4 +18,12 @@ public interface IPatientMedicalRecordService
 
     /// <summary>Returns the raw FileURL for one record, or null if not found.</summary>
     Task<string?> GetFileUrlAsync(int recordId, int patientDataId, CancellationToken cancellationToken);
+
+    Task<bool> UpdateAsync(
+        int recordId,
+        int patientDataId,
+        UpdatePatientMedicalRecordRequest request,
+        CancellationToken cancellationToken);
+
+    Task<string?> DeleteAsync(int recordId, int patientDataId, CancellationToken cancellationToken);
 }
