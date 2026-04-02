@@ -1,13 +1,14 @@
 using System.Globalization;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using OptimaHealthcare.Application.Abstractions;
 using OptimaHealthcare.Contracts.Patients;
-using PdfSharp.Pdf;
-using PdfSharp.Pdf.IO;
+using UglyToad.PdfPig;
+using UglyToad.PdfPig.Content;
 
 namespace OptimaHealthcare.Infrastructure.Services;
 
@@ -18,11 +19,12 @@ public sealed class SqlPatientRecordDetailService : IPatientRecordDetailService
         RegexOptions.Compiled);
 
     private readonly string _connectionString;
-    private readonly string _ocrProvider;
-    private readonly string _ocrApiKey;
-    private readonly string _ocrApiUrl;
-    private const int FreePlanFileSizeLimitBytes = 1_000_000;
-    private const int FreePlanPdfPageLimit = 3;
+    private readonly string? _googleVisionApiKey;
+
+    /// <summary>
+    /// Minimum distinct word count that qualifies extracted PDF text as real (non-empty/non-garbled).
+    /// </summary>
+    private const int MinMeaningfulWordCount = 8;
 
     public SqlPatientRecordDetailService(IConfiguration configuration)
     {
@@ -30,10 +32,7 @@ public sealed class SqlPatientRecordDetailService : IPatientRecordDetailService
             ?? configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string not found. Use ConnectionStrings:HealthCareContext or DefaultConnection.");
 
-        var ocrSection = configuration.GetSection("Ocr");
-        _ocrProvider = ocrSection["OCRPath"] ?? string.Empty;
-        _ocrApiKey = ocrSection["APIKey"] ?? string.Empty;
-        _ocrApiUrl = ocrSection["ApiUrl"] ?? "https://api.ocr.space/parse/image";
+        _googleVisionApiKey = configuration["GoogleVision:ApiKey"];
     }
 
     public async Task<IReadOnlyList<PatientRecordDetailDto>> ExtractPreviewAsync(
@@ -155,108 +154,224 @@ ORDER BY rk.[Keyword]";
         return results;
     }
 
+    // ─── Text extraction ──────────────────────────────────────────────────────
+
     private async Task<string> ExtractTextAsync(
         byte[] fileBytes,
         string contentType,
         CancellationToken cancellationToken)
     {
-        if (!string.Equals(_ocrProvider, "OCR.Space", StringComparison.OrdinalIgnoreCase))
+        var normalizedType = GetContentTypeOrDefault(contentType).ToLowerInvariant();
+
+        if (normalizedType.Contains("pdf"))
+        {
+            // Fast path: extract embedded text directly — works for virtually all
+            // digital lab reports without any cloud API call.
+            var pdfText = ExtractTextFromPdf(fileBytes);
+            if (CountWords(pdfText) >= MinMeaningfulWordCount)
+            {
+                return pdfText;
+            }
+            // If the PDF is a scanned document, PdfPig returns no/few words.
+            // Fall through to image OCR below.
+        }
+
+        // Image / scanned-PDF path — requires Google Cloud Vision API.
+        if (string.IsNullOrWhiteSpace(_googleVisionApiKey))
         {
             throw new InvalidOperationException(
-                "Unsupported OCR provider. Set Ocr:OCRPath to OCR.Space.");
+                "This document appears to be a scanned image. " +
+                "Configure GoogleVision:ApiKey to enable image OCR, " +
+                "or enter the values manually.");
         }
 
-        if (string.IsNullOrWhiteSpace(_ocrApiKey))
+        return await ExtractTextWithGoogleVisionAsync(fileBytes, normalizedType, cancellationToken);
+    }
+
+    // ─── PdfPig: digital-PDF text extraction ─────────────────────────────────
+
+    private static string ExtractTextFromPdf(byte[] fileBytes)
+    {
+        try
         {
-            throw new InvalidOperationException(
-                "OCR preview requires Ocr:APIKey to be configured.");
-        }
+            using var document = PdfDocument.Open(fileBytes, new ParsingOptions { UseLenientParsing = true });
 
-        var normalizedContentType = GetContentTypeOrDefault(contentType);
-        var ocrBytes = fileBytes;
-        if (normalizedContentType.Contains("pdf", StringComparison.OrdinalIgnoreCase))
+            var sb = new StringBuilder();
+            foreach (var page in document.GetPages())
+            {
+                var words = page.GetWords().ToList();
+                if (words.Count == 0)
+                {
+                    continue;
+                }
+
+                // Group by approximate vertical position to reconstruct reading-order lines.
+                var lineGroups = words
+                    .GroupBy(w => (int)Math.Round(w.BoundingBox.Bottom / 3.0) * 3)
+                    .OrderByDescending(g => g.Key);
+
+                foreach (var group in lineGroups)
+                {
+                    var lineText = string.Join(" ",
+                        group.OrderBy(w => w.BoundingBox.Left).Select(w => w.Text));
+                    if (!string.IsNullOrWhiteSpace(lineText))
+                    {
+                        sb.AppendLine(lineText);
+                    }
+                }
+
+                sb.AppendLine();
+            }
+
+            return sb.ToString().Trim();
+        }
+        catch
         {
-            ocrBytes = TrimPdfToFirstPages(fileBytes, FreePlanPdfPageLimit);
+            return string.Empty;
         }
+    }
 
-        if (ocrBytes.Length > FreePlanFileSizeLimitBytes)
+    private static int CountWords(string text) =>
+        text.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Length;
+
+    // ─── Google Cloud Vision: image / scanned-document OCR ───────────────────
+
+    private const string GoogleVisionAnnotateUrl =
+        "https://vision.googleapis.com/v1/images:annotate";
+    private const string GoogleVisionFilesUrl =
+        "https://vision.googleapis.com/v1/files:annotate";
+
+    /// <summary>
+    /// Sends the document to Google Cloud Vision DOCUMENT_TEXT_DETECTION and
+    /// returns all extracted text.
+    /// <para>
+    /// PDFs are submitted via the <c>files:annotate</c> endpoint (supports up
+    /// to 5 pages synchronously, which covers virtually all medical lab reports).
+    /// Images use the standard <c>images:annotate</c> endpoint.
+    /// </para>
+    /// </summary>
+    private async Task<string> ExtractTextWithGoogleVisionAsync(
+        byte[] fileBytes,
+        string normalizedContentType,
+        CancellationToken cancellationToken)
+    {
+        var isPdf = normalizedContentType.Contains("pdf");
+        var base64Content = Convert.ToBase64String(fileBytes);
+
+        string requestJson;
+        string url;
+
+        if (isPdf)
         {
-            throw new InvalidOperationException(
-                "OCR.Space free plan supports files up to 1 MB. The OCR input still exceeds that limit even after restricting PDF OCR to the first 3 pages.");
+            // files:annotate — processes up to 5 pages in a single synchronous call.
+            url = $"{GoogleVisionFilesUrl}?key={_googleVisionApiKey}";
+            requestJson = JsonSerializer.Serialize(new
+            {
+                requests = new[]
+                {
+                    new
+                    {
+                        inputConfig = new
+                        {
+                            content = base64Content,
+                            mimeType = "application/pdf"
+                        },
+                        features = new[]
+                        {
+                            new { type = "DOCUMENT_TEXT_DETECTION" }
+                        },
+                        pages = new[] { 1, 2, 3, 4, 5 }
+                    }
+                }
+            });
+        }
+        else
+        {
+            // images:annotate — works for JPEG, PNG, BMP, TIFF, WEBP, etc.
+            url = $"{GoogleVisionAnnotateUrl}?key={_googleVisionApiKey}";
+            requestJson = JsonSerializer.Serialize(new
+            {
+                requests = new[]
+                {
+                    new
+                    {
+                        image = new { content = base64Content },
+                        features = new[]
+                        {
+                            new { type = "DOCUMENT_TEXT_DETECTION" }
+                        }
+                    }
+                }
+            });
         }
 
-        using var httpClient = new HttpClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, _ocrApiUrl);
-        request.Headers.Add("apikey", _ocrApiKey);
+        using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+        using var httpContent = new StringContent(requestJson, Encoding.UTF8, "application/json");
 
-        using var form = new MultipartFormDataContent();
-        form.Add(new StringContent("eng"), "language");
-        form.Add(new StringContent("false"), "isOverlayRequired");
-        form.Add(new StringContent("2"), "OCREngine");
-        form.Add(new StringContent("true"), "scale");
-        form.Add(new StringContent("true"), "detectOrientation");
-        form.Add(new StringContent("true"), "isTable");
-        form.Add(new StringContent(GetOcrSpaceFileType(normalizedContentType)), "filetype");
-
-        var fileContent = new ByteArrayContent(ocrBytes);
-        fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse(normalizedContentType);
-        form.Add(fileContent, "file", GetFileName(normalizedContentType));
-
-        request.Content = form;
-
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+        var response = await httpClient.PostAsync(url, httpContent, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(
-                $"OCR.Space request failed with {(int)response.StatusCode}: {responseText}");
+                $"Google Cloud Vision API failed ({(int)response.StatusCode}): {responseBody}");
         }
 
-        return ParseOcrSpaceText(responseText);
+        return ParseGoogleVisionResponse(responseBody, isPdf);
     }
 
-    private static string ParseOcrSpaceText(string responseText)
+    private static string ParseGoogleVisionResponse(string json, bool isPdf)
     {
-        using var document = JsonDocument.Parse(responseText);
-        var root = document.RootElement;
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
 
-        if (root.TryGetProperty("IsErroredOnProcessing", out var isErroredElement) &&
-            isErroredElement.ValueKind == JsonValueKind.True)
-        {
-            var errorMessage = TryReadStringArray(root, "ErrorMessage");
-            var errorDetails = root.TryGetProperty("ErrorDetails", out var detailsElement)
-                ? detailsElement.ToString()
-                : string.Empty;
-            var combinedError = string.Join(" ", new[] { errorMessage, errorDetails }
-                .Where(value => !string.IsNullOrWhiteSpace(value)));
-
-            throw new InvalidOperationException(
-                string.IsNullOrWhiteSpace(combinedError)
-                    ? "OCR.Space could not process the document."
-                    : combinedError);
-        }
-
-        if (!root.TryGetProperty("ParsedResults", out var parsedResults) ||
-            parsedResults.ValueKind != JsonValueKind.Array)
+        if (!root.TryGetProperty("responses", out var outerResponses))
         {
             return string.Empty;
         }
 
-        var textParts = new List<string>();
-        foreach (var parsedResult in parsedResults.EnumerateArray())
+        var parts = new List<string>();
+
+        foreach (var outerResponse in outerResponses.EnumerateArray())
         {
-            if (parsedResult.TryGetProperty("ParsedText", out var parsedTextElement))
+            if (isPdf)
             {
-                var parsedText = parsedTextElement.GetString();
-                if (!string.IsNullOrWhiteSpace(parsedText))
+                // files:annotate wraps page results in a nested "responses" array.
+                if (outerResponse.TryGetProperty("responses", out var pageResponses))
                 {
-                    textParts.Add(parsedText);
+                    foreach (var pageResponse in pageResponses.EnumerateArray())
+                    {
+                        var text = ReadFullTextAnnotation(pageResponse);
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            parts.Add(text);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // images:annotate — fullTextAnnotation is directly on the response.
+                var text = ReadFullTextAnnotation(outerResponse);
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    parts.Add(text);
                 }
             }
         }
 
-        return string.Join(Environment.NewLine, textParts).Trim();
+        return string.Join(Environment.NewLine, parts).Trim();
+    }
+
+    private static string ReadFullTextAnnotation(JsonElement element)
+    {
+        if (element.TryGetProperty("fullTextAnnotation", out var fta) &&
+            fta.TryGetProperty("text", out var textProp))
+        {
+            return textProp.GetString() ?? string.Empty;
+        }
+
+        return string.Empty;
     }
 
     private async Task<IReadOnlyList<RecordKeywordDefinition>> LoadKeywordsAsync(CancellationToken cancellationToken)
@@ -500,95 +615,6 @@ ORDER BY rk.[lRecordKeywordId]";
         }
 
         return contentType.Trim();
-    }
-
-    private static string GetFileName(string? contentType)
-    {
-        var normalizedType = GetContentTypeOrDefault(contentType).ToLowerInvariant();
-        if (normalizedType.Contains("pdf", StringComparison.Ordinal))
-        {
-            return "report.pdf";
-        }
-
-        if (normalizedType.Contains("png", StringComparison.Ordinal))
-        {
-            return "report.png";
-        }
-
-        if (normalizedType.Contains("bmp", StringComparison.Ordinal))
-        {
-            return "report.bmp";
-        }
-
-        return "report.jpg";
-    }
-
-    private static string GetOcrSpaceFileType(string? contentType)
-    {
-        var normalizedType = GetContentTypeOrDefault(contentType).ToLowerInvariant();
-        if (normalizedType.Contains("pdf", StringComparison.Ordinal))
-        {
-            return "PDF";
-        }
-
-        if (normalizedType.Contains("png", StringComparison.Ordinal))
-        {
-            return "PNG";
-        }
-
-        if (normalizedType.Contains("bmp", StringComparison.Ordinal))
-        {
-            return "BMP";
-        }
-
-        return "JPG";
-    }
-
-    private static byte[] TrimPdfToFirstPages(byte[] fileBytes, int pageLimit)
-    {
-        try
-        {
-            using var inputStream = new MemoryStream(fileBytes, writable: false);
-            using var inputDocument = PdfReader.Open(inputStream, PdfDocumentOpenMode.Import);
-
-            if (inputDocument.PageCount <= pageLimit)
-            {
-                return fileBytes;
-            }
-
-            using var outputDocument = new PdfDocument();
-            var pagesToCopy = Math.Min(pageLimit, inputDocument.PageCount);
-            for (var i = 0; i < pagesToCopy; i++)
-            {
-                outputDocument.AddPage(inputDocument.Pages[i]);
-            }
-
-            using var outputStream = new MemoryStream();
-            outputDocument.Save(outputStream, false);
-            return outputStream.ToArray();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException(
-                $"Could not limit the PDF to the first {pageLimit} pages for OCR. {ex.Message}");
-        }
-    }
-
-    private static string TryReadStringArray(JsonElement root, string propertyName)
-    {
-        if (!root.TryGetProperty(propertyName, out var element))
-        {
-            return string.Empty;
-        }
-
-        return element.ValueKind switch
-        {
-            JsonValueKind.String => element.GetString() ?? string.Empty,
-            JsonValueKind.Array => string.Join(" ", element.EnumerateArray()
-                .Select(item => item.GetString())
-                .Where(value => !string.IsNullOrWhiteSpace(value))),
-            _ => element.ToString()
-        };
     }
 
     private static PatientRecordDetailDto MapDto(SqlDataReader reader)
