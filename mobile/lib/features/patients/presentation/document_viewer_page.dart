@@ -695,9 +695,7 @@ class _DocumentViewerPageState extends State<DocumentViewerPage>
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
-                          _loadedFromSavedDetails
-                              ? 'Changes saved to PatientRecordDetail.'
-                              : 'Saved to PatientRecordDetail.',
+                          'Records are saved successfully.',
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.primary,
                           ),

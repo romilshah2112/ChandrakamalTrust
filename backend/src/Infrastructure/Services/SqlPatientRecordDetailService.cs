@@ -18,6 +18,13 @@ public sealed class SqlPatientRecordDetailService : IPatientRecordDetailService
         @"(?im)\b(?:patient\s*name|name)\b\s*[:\-]?\s*([A-Za-z][A-Za-z .]{2,80})",
         RegexOptions.Compiled);
 
+    // Strips the word "Sex" and anything after it from a captured patient name.
+    // Lab reports often print "Name: John Doe Sex: Male" on one line, causing the
+    // raw capture group to include "Sex" and the gender value.
+    private static readonly Regex PatientNameSexCleanupRegex = new(
+        @"\s*\bSex\b.*$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private readonly string _connectionString;
     private readonly string? _googleVisionApiKey;
 
@@ -103,7 +110,7 @@ VALUES
             {
                 await using var insertCommand = new SqlCommand(insertSql, connection, (SqlTransaction)transaction);
                 insertCommand.Parameters.AddWithValue("@patientMedicalRecordId", patientMedicalRecordId);
-                insertCommand.Parameters.AddWithValue("@patientNameInRecord", NormalizeWhitespace(patientNameInRecord));
+                insertCommand.Parameters.AddWithValue("@patientNameInRecord", CleanPatientName(patientNameInRecord));
                 insertCommand.Parameters.AddWithValue("@recordKeywordId", detail.RecordKeywordId);
                 insertCommand.Parameters.AddWithValue("@readingValue", detail.ReadingValue);
                 insertCommand.Parameters.AddWithValue("@reportDateTime", detail.ReportDateTime.Kind == DateTimeKind.Unspecified
@@ -149,6 +156,50 @@ ORDER BY rk.[Keyword]";
         while (await reader.ReadAsync(cancellationToken))
         {
             results.Add(MapDto(reader));
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<PatientRecordDetailDto>> ListByPatientAsync(
+        int patientDataId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        const string sql = @"
+SELECT
+    d.[lPatientRecordDetailId],
+    d.[lPatientMedicalRecordId],
+    d.[PatientNameInRecord],
+    d.[lRecordKeywordId],
+    rk.[Keyword],
+    rk.[Description],
+    d.[ReadingValue],
+    rk.[IdealLower],
+    rk.[IdealUpper],
+    d.[ReportDateTime],
+    ISNULL(rk.[lRecordParameterId], 0)    AS RecordParameterId,
+    ISNULL(rp.[TestName], '')             AS RecordParameterName
+FROM [PatientRecordDetail] d
+INNER JOIN [PatientMedicalRecord] pmr
+    ON pmr.[lPatientMedicalRecordId] = d.[lPatientMedicalRecordId]
+INNER JOIN [RecordKeyword] rk
+    ON rk.[lRecordKeywordId] = d.[lRecordKeywordId]
+LEFT JOIN [RecordParameter] rp
+    ON rp.[lRecordParameterId] = rk.[lRecordParameterId]
+WHERE pmr.[lPatientDataId] = @patientDataId
+ORDER BY ISNULL(rp.[TestName], ''), rk.[Keyword], d.[ReportDateTime] ASC";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@patientDataId", patientDataId);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var results = new List<PatientRecordDetailDto>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(MapAnalyticsDto(reader));
         }
 
         return results;
@@ -596,10 +647,17 @@ ORDER BY rk.[lRecordKeywordId]";
         var match = PatientNameRegex.Match(text);
         if (match.Success)
         {
-            return NormalizeWhitespace(match.Groups[1].Value);
+            var rawName = PatientNameSexCleanupRegex.Replace(match.Groups[1].Value, string.Empty);
+            return NormalizeWhitespace(rawName);
         }
 
         return NormalizeWhitespace(fallbackPatientName);
+    }
+
+    private static string CleanPatientName(string patientNameInRecord)
+    {
+        var cleaned = PatientNameSexCleanupRegex.Replace(patientNameInRecord, string.Empty);
+        return NormalizeWhitespace(cleaned);
     }
 
     private static string NormalizeWhitespace(string value)
@@ -631,6 +689,25 @@ ORDER BY rk.[lRecordKeywordId]";
             IdealLower = reader["IdealLower"] is DBNull ? null : Convert.ToDouble(reader["IdealLower"], CultureInfo.InvariantCulture),
             IdealUpper = reader["IdealUpper"] is DBNull ? null : Convert.ToDouble(reader["IdealUpper"], CultureInfo.InvariantCulture),
             ReportDateTime = reader["ReportDateTime"] is DateTime dt ? dt : default
+        };
+    }
+
+    private static PatientRecordDetailDto MapAnalyticsDto(SqlDataReader reader)
+    {
+        return new PatientRecordDetailDto
+        {
+            PatientRecordDetailId = Convert.ToInt32(reader["lPatientRecordDetailId"]),
+            PatientMedicalRecordId = Convert.ToInt32(reader["lPatientMedicalRecordId"]),
+            PatientNameInRecord = reader["PatientNameInRecord"]?.ToString() ?? string.Empty,
+            RecordKeywordId = Convert.ToInt32(reader["lRecordKeywordId"]),
+            Keyword = reader["Keyword"]?.ToString() ?? string.Empty,
+            Description = reader["Description"]?.ToString() ?? string.Empty,
+            ReadingValue = Convert.ToDouble(reader["ReadingValue"], CultureInfo.InvariantCulture),
+            IdealLower = reader["IdealLower"] is DBNull ? null : Convert.ToDouble(reader["IdealLower"], CultureInfo.InvariantCulture),
+            IdealUpper = reader["IdealUpper"] is DBNull ? null : Convert.ToDouble(reader["IdealUpper"], CultureInfo.InvariantCulture),
+            ReportDateTime = reader["ReportDateTime"] is DateTime dt ? dt : default,
+            RecordParameterId = Convert.ToInt32(reader["RecordParameterId"]),
+            RecordParameterName = reader["RecordParameterName"]?.ToString() ?? string.Empty
         };
     }
 

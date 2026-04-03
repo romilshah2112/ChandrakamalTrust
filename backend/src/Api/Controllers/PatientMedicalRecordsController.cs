@@ -193,6 +193,29 @@ public sealed class PatientMedicalRecordsController : ControllerBase
             $"Cloudinary returned {statusCode}. {failureDetail ?? "The file may be inaccessible or the signed URL is invalid."}");
     }
 
+    [HttpGet("api/v1/patient-data/{patientDataId:int}/analytics")]
+    [ProducesResponseType(typeof(IReadOnlyList<PatientRecordDetailDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<PatientRecordDetailDto>>> GetAnalytics(
+        int patientDataId,
+        CancellationToken cancellationToken)
+    {
+        if (!IsStaffUser())
+        {
+            return Forbid();
+        }
+
+        var patient = await _patientDataService.GetByIdAsync(patientDataId, cancellationToken);
+        if (patient is null)
+        {
+            return NotFound();
+        }
+
+        var details = await _patientRecordDetailService.ListByPatientAsync(patientDataId, cancellationToken);
+        return Ok(details);
+    }
+
     [HttpGet("api/v1/patient-data/{patientDataId:int}/medical-records/{recordId:int}/ocr-preview")]
     [ProducesResponseType(typeof(IReadOnlyList<PatientRecordDetailDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

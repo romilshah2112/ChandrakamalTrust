@@ -10,6 +10,8 @@ class PatientRecordDetailModel {
     this.idealLower,
     this.idealUpper,
     required this.reportDateTime,
+    this.recordParameterId = 0,
+    this.recordParameterName = '',
   });
 
   final int patientRecordDetailId;
@@ -22,6 +24,8 @@ class PatientRecordDetailModel {
   final double? idealLower;
   final double? idealUpper;
   final String reportDateTime;
+  final int recordParameterId;
+  final String recordParameterName;
 
   PatientRecordDetailModel copyWith({
     int? patientRecordDetailId,
@@ -34,6 +38,8 @@ class PatientRecordDetailModel {
     double? idealLower,
     double? idealUpper,
     String? reportDateTime,
+    int? recordParameterId,
+    String? recordParameterName,
   }) {
     return PatientRecordDetailModel(
       patientRecordDetailId:
@@ -48,6 +54,8 @@ class PatientRecordDetailModel {
       idealLower: idealLower ?? this.idealLower,
       idealUpper: idealUpper ?? this.idealUpper,
       reportDateTime: reportDateTime ?? this.reportDateTime,
+      recordParameterId: recordParameterId ?? this.recordParameterId,
+      recordParameterName: recordParameterName ?? this.recordParameterName,
     );
   }
 
@@ -66,6 +74,8 @@ class PatientRecordDetailModel {
       idealLower: toNullableDouble(json['idealLower']),
       idealUpper: toNullableDouble(json['idealUpper']),
       reportDateTime: json['reportDateTime'] as String? ?? '',
+      recordParameterId: (json['recordParameterId'] as num?)?.toInt() ?? 0,
+      recordParameterName: json['recordParameterName'] as String? ?? '',
     );
   }
 }

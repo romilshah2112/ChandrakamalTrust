@@ -594,6 +594,43 @@ class ApiClient {
     );
   }
 
+  Future<List<PatientRecordDetailModel>> getPatientAnalytics({
+    required String accessToken,
+    required int patientDataId,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/patient-data/$patientDataId/analytics',
+    );
+    final response = await _httpClient.get(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map(
+            (item) => PatientRecordDetailModel.fromJson(
+              item as Map<String, dynamic>,
+            ),
+          )
+          .toList();
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException('You are not allowed to view patient analytics.');
+    }
+
+    if (response.statusCode == 404) {
+      throw const AuthException('Patient not found.');
+    }
+
+    final body = response.body.trim();
+    throw AuthException(
+      body.isNotEmpty ? body : 'Get patient analytics failed: HTTP ${response.statusCode}',
+    );
+  }
+
   Future<void> savePatientRecordDetails({
     required String accessToken,
     required int patientDataId,

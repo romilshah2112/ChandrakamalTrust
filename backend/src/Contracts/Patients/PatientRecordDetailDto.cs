@@ -12,4 +12,8 @@ public sealed class PatientRecordDetailDto
     public double? IdealLower { get; init; }
     public double? IdealUpper { get; init; }
     public DateTime ReportDateTime { get; init; }
+
+    /// <summary>Populated only by the analytics endpoint (ListByPatientAsync).</summary>
+    public int RecordParameterId { get; init; }
+    public string RecordParameterName { get; init; } = string.Empty;
 }

@@ -20,4 +20,8 @@ public interface IPatientRecordDetailService
     Task<IReadOnlyList<PatientRecordDetailDto>> ListByMedicalRecordAsync(
         int patientMedicalRecordId,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<PatientRecordDetailDto>> ListByPatientAsync(
+        int patientDataId,
+        CancellationToken cancellationToken);
 }

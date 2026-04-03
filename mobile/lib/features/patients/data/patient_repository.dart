@@ -109,6 +109,16 @@ class PatientRepository {
     );
   }
 
+  Future<List<PatientRecordDetailModel>> getPatientAnalytics({
+    required String accessToken,
+    required int patientDataId,
+  }) {
+    return _apiClient.getPatientAnalytics(
+      accessToken: accessToken,
+      patientDataId: patientDataId,
+    );
+  }
+
   Future<List<RecordKeywordLookupModel>> getRecordKeywords({
     required String accessToken,
   }) {
