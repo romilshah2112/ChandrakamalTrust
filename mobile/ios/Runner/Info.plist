@@ -47,5 +47,26 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app needs microphone access for real-time consultation transcription.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app uses the camera to capture and upload medical document photos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs access to your photo library to select and upload medical documents.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>This app may save processed medical documents to your photo library.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>This app accesses your documents folder to upload medical records and reports.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 </dict>
 </plist>

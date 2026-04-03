@@ -1,0 +1,225 @@
+# =============================================================================
+# codemagic.yaml  –  Optima Healthcare Mobile
+# Docs: https://docs.codemagic.io/yaml/yaml-getting-started/
+#
+# HOW TO USE
+# ──────────
+# 1. Push this file to the root of your Git repository.
+# 2. Connect the repository in Codemagic (https://codemagic.io).
+# 3. The following variables must be set as Global variables in
+#    Codemagic UI → Teams → Global variables & secrets
+#    (they are already added and injected automatically — no groups needed):
+#
+#      APP_STORE_CONNECT_KEY_IDENTIFIER  – Key ID from App Store Connect
+#      APP_STORE_CONNECT_ISSUER_ID       – Issuer UUID from App Store Connect
+#      APP_STORE_CONNECT_PRIVATE_KEY     – Full content of your .p8 API key file
+#      CERTIFICATE_PRIVATE_KEY          – RSA 2048 private key PEM content
+#
+# 4. Register your bundle ID in App Store Connect, then fill in
+#    APP_STORE_APP_ID below.
+#
+# PREREQUISITE – Podfile
+# ──────────────────────
+# The Podfile is not yet committed to this repo.  Before the first CI run:
+#   1. On a Mac with Xcode and CocoaPods installed, run:
+#        cd mobile && flutter pub get
+#   2. Commit the generated ios/Podfile (but NOT ios/Pods/) to Git.
+#
+# =============================================================================
+
+definitions:
+  # Shared environment used by both iOS workflows.
+  # Global variables are injected automatically — no 'groups' key needed.
+  ios_base_env: &ios_base_env
+    flutter: stable         # Pin to e.g. "3.32.0" once you settle on a version
+    xcode: latest           # Xcode 16+
+    cocoapods: default
+
+# =============================================================================
+workflows:
+# =============================================================================
+
+  # ── 1. iOS Release  (App Store / TestFlight) ─────────────────────────────
+  ios-release:
+    name: "iOS — Release (TestFlight / App Store)"
+    instance_type: mac_mini_m2    # Apple Silicon; faster & cheaper than mac_pro
+    max_build_duration: 60        # minutes; fail fast if hung
+
+    environment:
+      <<: *ios_base_env
+      vars:
+        # ── App identifiers ────────────────────────────────────────────────
+        BUNDLE_ID: "com.optimahealthcare.optimaHealthcareMobile"
+        # Numeric App ID from App Store Connect → App Information
+        # Leave empty until the app is registered; publishing will be skipped.
+        APP_STORE_APP_ID: ""
+
+        # ── Runtime config ─────────────────────────────────────────────────
+        # Baked into the binary via --dart-define at build time.
+        # Override here or via a Codemagic environment group for staging builds.
+        API_BASE_URL: "https://optimahealthapp-production.up.railway.app"
+
+        # ── Build metadata ──────────────────────────────────────────────────
+        FLUTTER_APP_DIR: "mobile"           # subfolder containing pubspec.yaml
+        XCODE_SCHEME: "Runner"
+        XCODE_WORKSPACE: "mobile/ios/Runner.xcworkspace"
+
+    triggering:
+      events:
+        - push
+        - tag
+      branch_patterns:
+        - pattern: "main"
+          include: true
+          source: true
+      tag_patterns:
+        # Trigger a release build for any tag matching "v*" (e.g. v1.0.0)
+        - pattern: "v*"
+          include: true
+      cancel_previous_builds: true
+
+    scripts:
+      # ── 1. Fetch Flutter packages ─────────────────────────────────────────
+      - name: Flutter — pub get
+        script: |
+          cd "$FLUTTER_APP_DIR"
+          flutter pub get
+
+      # ── 2. Install CocoaPods ──────────────────────────────────────────────
+      # flutter build ipa handles pod install internally, but running it
+      # explicitly here catches dependency errors early and speeds the main step.
+      - name: CocoaPods — pod install
+        script: |
+          cd "$FLUTTER_APP_DIR/ios"
+          pod install --repo-update
+
+      # ── 3. Code signing ───────────────────────────────────────────────────
+      # Uses Codemagic's built-in App Store Connect integration to:
+      #   • Fetch / auto-create the Distribution certificate from Apple
+      #   • Fetch / auto-create the App Store provisioning profile
+      #   • Install both into the macOS keychain
+      #   • Patch Runner.xcodeproj to use Manual signing with those files
+      #   • Write /Users/builder/export_options.plist for xcodebuild
+      - name: iOS — set up code signing
+        script: |
+          keychain initialize
+
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --certificate-key=@env:CERTIFICATE_PRIVATE_KEY \
+            --create
+
+          keychain add-certificates
+          xcode-project use-profiles
+
+      # ── 4. Build IPA ──────────────────────────────────────────────────────
+      - name: Flutter — build IPA (release)
+        script: |
+          cd "$FLUTTER_APP_DIR"
+
+          # Derive build number from Codemagic's pipeline counter so each build
+          # uploaded to App Store Connect has a unique CFBundleVersion.
+          BUILD_NUMBER=$PROJECT_BUILD_NUMBER
+
+          flutter build ipa \
+            --release \
+            --build-number="$BUILD_NUMBER" \
+            --dart-define=API_BASE_URL="$API_BASE_URL" \
+            --export-options-plist=/Users/builder/export_options.plist
+
+    # ── Artifacts to collect ─────────────────────────────────────────────────
+    artifacts:
+      - mobile/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - mobile/flutter_drive.log
+
+    # ── Notifications & publishing ────────────────────────────────────────────
+    publishing:
+      email:
+        recipients:
+          - developer@optimahealthcare.com   # ← replace with your address
+        notify:
+          success: true
+          failure: true
+
+      app_store_connect:
+        # Reads APP_STORE_CONNECT_* vars injected from Codemagic global variables
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        # Automatically add new builds to this TestFlight group:
+        beta_groups:
+          - "Internal Testers"             # ← adjust to your TestFlight group
+        # Set to true only when ready to submit to App Store Review:
+        submit_to_app_store: false
+
+
+  # ── 2. iOS Development / Ad-hoc  (physical device testing) ───────────────
+  ios-development:
+    name: "iOS — Development (Ad-hoc)"
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+
+    environment:
+      <<: *ios_base_env
+      vars:
+        BUNDLE_ID: "com.optimahealthcare.optimaHealthcareMobile"
+        API_BASE_URL: "https://optimahealthapp-production.up.railway.app"
+        FLUTTER_APP_DIR: "mobile"
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: "develop"
+          include: true
+          source: true
+        - pattern: "feature/*"
+          include: true
+          source: true
+      cancel_previous_builds: true
+
+    scripts:
+      - name: Flutter — pub get
+        script: |
+          cd "$FLUTTER_APP_DIR"
+          flutter pub get
+
+      - name: CocoaPods — pod install
+        script: |
+          cd "$FLUTTER_APP_DIR/ios"
+          pod install --repo-update
+
+      - name: iOS — set up code signing (Ad-hoc)
+        script: |
+          keychain initialize
+
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_ADHOC \
+            --certificate-key=@env:CERTIFICATE_PRIVATE_KEY \
+            --create
+
+          keychain add-certificates
+          xcode-project use-profiles
+
+      - name: Flutter — build IPA (ad-hoc)
+        script: |
+          cd "$FLUTTER_APP_DIR"
+          flutter build ipa \
+            --release \
+            --build-number="$PROJECT_BUILD_NUMBER" \
+            --dart-define=API_BASE_URL="$API_BASE_URL" \
+            --export-options-plist=/Users/builder/export_options.plist
+
+    artifacts:
+      - mobile/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      email:
+        recipients:
+          - developer@optimahealthcare.com
+        notify:
+          success: true
+          failure: true
