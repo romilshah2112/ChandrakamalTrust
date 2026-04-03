@@ -32,6 +32,89 @@ public sealed class PatientMedicalRecordsController : ControllerBase
         _imageStorage = imageStorage;
     }
 
+    // ── Patient self-access (read-only) ────────────────────────────────────────
+
+    /// <summary>Returns the logged-in patient's own medical records.</summary>
+    [HttpGet("api/v1/patient-data/me/medical-records")]
+    [ProducesResponseType(typeof(IReadOnlyList<PatientMedicalRecordDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<PatientMedicalRecordDto>>> ListMine(
+        CancellationToken cancellationToken)
+    {
+        var appUserId = User.GetAppUserId();
+        if (appUserId <= 0) return Unauthorized();
+
+        var patient = await _patientDataService.GetByAppUserIdAsync(appUserId, cancellationToken);
+        if (patient is null) return NotFound();
+
+        var list = await _medicalRecordService.ListByPatientAsync(patient.PatientDataId, cancellationToken);
+        return Ok(list);
+    }
+
+    /// <summary>Streams a medical-record file for the logged-in patient (own records only).</summary>
+    [HttpGet("api/v1/patient-data/me/medical-records/{recordId:int}/file")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> DownloadMyFile(int recordId, CancellationToken cancellationToken)
+    {
+        var appUserId = User.GetAppUserId();
+        if (appUserId <= 0) return Unauthorized();
+
+        var patient = await _patientDataService.GetByAppUserIdAsync(appUserId, cancellationToken);
+        if (patient is null) return NotFound();
+
+        var fileUrl = await _medicalRecordService.GetFileUrlAsync(recordId, patient.PatientDataId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(fileUrl)) return NotFound();
+
+        using var httpClient = new HttpClient();
+        HttpResponseMessage? response = null;
+        string? failureDetail = null;
+
+        foreach (var candidateUrl in _imageStorage.GenerateSignedUrlCandidates(fileUrl))
+        {
+            try { response = await httpClient.GetAsync(candidateUrl, cancellationToken); }
+            catch (Exception ex) { failureDetail = ex.Message; continue; }
+
+            if (response.IsSuccessStatusCode)
+            {
+                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+                var contentType = response.Content.Headers.ContentType?.MediaType
+                    ?? (fileUrl.Contains(".pdf", StringComparison.OrdinalIgnoreCase)
+                        ? "application/pdf" : "image/jpeg");
+                return File(bytes, contentType);
+            }
+
+            failureDetail = await response.Content.ReadAsStringAsync(cancellationToken);
+        }
+
+        var statusCode = response?.StatusCode is not null
+            ? (int)response.StatusCode : StatusCodes.Status502BadGateway;
+        return StatusCode(StatusCodes.Status502BadGateway,
+            $"Cloudinary returned {statusCode}. {failureDetail ?? "File may be inaccessible."}");
+    }
+
+    /// <summary>Returns analytics data for the logged-in patient's own records.</summary>
+    [HttpGet("api/v1/patient-data/me/analytics")]
+    [ProducesResponseType(typeof(IReadOnlyList<PatientRecordDetailDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<PatientRecordDetailDto>>> GetMyAnalytics(
+        CancellationToken cancellationToken)
+    {
+        var appUserId = User.GetAppUserId();
+        if (appUserId <= 0) return Unauthorized();
+
+        var patient = await _patientDataService.GetByAppUserIdAsync(appUserId, cancellationToken);
+        if (patient is null) return NotFound();
+
+        var details = await _patientRecordDetailService.ListByPatientAsync(patient.PatientDataId, cancellationToken);
+        return Ok(details);
+    }
+
+    // ── Staff endpoints ─────────────────────────────────────────────────────────
+
     [HttpGet("api/v1/patient-data/{patientDataId:int}/medical-records")]
     [ProducesResponseType(typeof(IReadOnlyList<PatientMedicalRecordDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

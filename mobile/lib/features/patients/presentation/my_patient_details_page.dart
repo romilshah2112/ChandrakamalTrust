@@ -4,6 +4,8 @@ import 'package:optima_healthcare_mobile/features/auth/models/auth_session.dart'
 import 'package:optima_healthcare_mobile/features/patients/data/patient_repository.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_contact_update_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_detail.dart';
+import 'package:optima_healthcare_mobile/features/patients/presentation/patient_analytics_page.dart';
+import 'package:optima_healthcare_mobile/features/patients/presentation/patient_medical_records_page.dart';
 import 'package:optima_healthcare_mobile/features/patients/presentation/patient_vitals_page.dart';
 
 class MyPatientDetailsPage extends StatefulWidget {
@@ -190,15 +192,45 @@ class _MyPatientDetailsPageState extends State<MyPatientDetailsPage> {
   }
 
   Future<void> _openVitals() async {
-    if (_patient == null) {
-      return;
-    }
+    if (_patient == null) return;
 
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => PatientVitalsPage(
           patientDataId: _patient!.patientDataId,
           patientName: '${_patient!.firstName} ${_patient!.lastName}'.trim(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openMedicalRecords() async {
+    if (_patient == null) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => PatientMedicalRecordsPage(
+          patientDataId: _patient!.patientDataId,
+          patientName: '${_patient!.firstName} ${_patient!.lastName}'.trim(),
+          readOnly: true,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openAnalytics() async {
+    if (_patient == null) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => PatientAnalyticsPage(
+          patientDataId: _patient!.patientDataId,
+          patientName: '${_patient!.firstName} ${_patient!.lastName}'.trim(),
+          patientGender: _patient!.gender,
+          patientMobile: '${_patient!.mobileNo}',
+          patientCity: _patient!.city,
+          patientBirthDate: _patient!.birthDate,
+          readOnly: true,
         ),
       ),
     );
@@ -262,6 +294,16 @@ class _MyPatientDetailsPageState extends State<MyPatientDetailsPage> {
               onPressed: _loading ? null : _openVitals,
             ),
             IconButton(
+              icon: const Icon(Icons.folder_open_outlined),
+              tooltip: 'Medical records',
+              onPressed: _loading ? null : _openMedicalRecords,
+            ),
+            IconButton(
+              icon: const Icon(Icons.insights_outlined),
+              tooltip: 'Analytics',
+              onPressed: _loading ? null : _openAnalytics,
+            ),
+            IconButton(
               icon: const Icon(Icons.edit),
               tooltip: 'Update contact details',
               onPressed: _loading ? null : _editContact,
@@ -299,12 +341,22 @@ class _MyPatientDetailsPageState extends State<MyPatientDetailsPage> {
                             OutlinedButton.icon(
                               onPressed: _openVitals,
                               icon: const Icon(Icons.monitor_heart_outlined),
-                              label: const Text('My vitals'),
+                              label: const Text('My Vitals'),
+                            ),
+                            FilledButton.icon(
+                              onPressed: _openMedicalRecords,
+                              icon: const Icon(Icons.folder_open_outlined),
+                              label: const Text('Medical Records'),
+                            ),
+                            FilledButton.icon(
+                              onPressed: _openAnalytics,
+                              icon: const Icon(Icons.insights_outlined),
+                              label: const Text('Analytics'),
                             ),
                             OutlinedButton.icon(
                               onPressed: _editContact,
                               icon: const Icon(Icons.edit),
-                              label: const Text('Update contact details'),
+                              label: const Text('Update Contact'),
                             ),
                           ],
                         ),

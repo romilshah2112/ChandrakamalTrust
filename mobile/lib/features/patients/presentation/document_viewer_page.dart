@@ -13,9 +13,16 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
 class DocumentViewerPage extends StatefulWidget {
-  const DocumentViewerPage({super.key, required this.record});
+  const DocumentViewerPage({
+    super.key,
+    required this.record,
+    this.readOnly = false,
+  });
 
   final PatientMedicalRecordModel record;
+  /// When [readOnly] is true, the document is fetched via the patient
+  /// self-access endpoint and all edit controls are hidden.
+  final bool readOnly;
 
   @override
   State<DocumentViewerPage> createState() => _DocumentViewerPageState();
@@ -80,10 +87,16 @@ class _DocumentViewerPageState extends State<DocumentViewerPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    // Read-only (patient) view: only the document tab is shown.
+    _tabController = TabController(
+      length: widget.readOnly ? 1 : 2,
+      vsync: this,
+    );
     _fetchDocument();
-    _fetchRecordKeywords();
-    _fetchOcrPreview();
+    if (!widget.readOnly) {
+      _fetchRecordKeywords();
+      _fetchOcrPreview();
+    }
   }
 
   @override
@@ -114,11 +127,16 @@ class _DocumentViewerPageState extends State<DocumentViewerPage>
         throw Exception('Session expired. Please log in again.');
       }
 
-      final raw = await _repo.downloadMedicalRecordFile(
-        accessToken: token,
-        patientDataId: widget.record.patientDataId,
-        recordId: widget.record.patientMedicalRecordId,
-      );
+      final raw = widget.readOnly
+          ? await _repo.downloadMyMedicalRecordFile(
+              accessToken: token,
+              recordId: widget.record.patientMedicalRecordId,
+            )
+          : await _repo.downloadMedicalRecordFile(
+              accessToken: token,
+              patientDataId: widget.record.patientDataId,
+              recordId: widget.record.patientMedicalRecordId,
+            );
 
       if (!mounted) return;
       setState(() {
@@ -534,13 +552,15 @@ class _DocumentViewerPageState extends State<DocumentViewerPage>
                   onPressed: _bytes == null ? null : _download,
                 ),
               ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Document'),
-            Tab(text: 'Extracted Values'),
-          ],
-        ),
+        bottom: widget.readOnly
+            ? null
+            : TabBar(
+                controller: _tabController,
+                tabs: const [
+                  Tab(text: 'Document'),
+                  Tab(text: 'Extracted Values'),
+                ],
+              ),
       ),
       body: Column(
         children: [
@@ -565,7 +585,7 @@ class _DocumentViewerPageState extends State<DocumentViewerPage>
               controller: _tabController,
               children: [
                 _buildDocumentTab(),
-                _buildExtractedValuesTab(),
+                if (!widget.readOnly) _buildExtractedValuesTab(),
               ],
             ),
           ),

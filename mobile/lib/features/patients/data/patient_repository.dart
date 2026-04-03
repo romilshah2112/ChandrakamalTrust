@@ -119,6 +119,30 @@ class PatientRepository {
     );
   }
 
+  // ── Patient self-access (my own records) ────────────────────────────────────
+
+  Future<List<PatientMedicalRecordModel>> getMyMedicalRecords({
+    required String accessToken,
+  }) {
+    return _apiClient.getMyMedicalRecords(accessToken: accessToken);
+  }
+
+  Future<List<int>> downloadMyMedicalRecordFile({
+    required String accessToken,
+    required int recordId,
+  }) {
+    return _apiClient.downloadMyMedicalRecordFile(
+      accessToken: accessToken,
+      recordId: recordId,
+    );
+  }
+
+  Future<List<PatientRecordDetailModel>> getMyAnalytics({
+    required String accessToken,
+  }) {
+    return _apiClient.getMyAnalytics(accessToken: accessToken);
+  }
+
   Future<List<RecordKeywordLookupModel>> getRecordKeywords({
     required String accessToken,
   }) {

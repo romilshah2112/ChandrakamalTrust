@@ -631,6 +631,79 @@ class ApiClient {
     );
   }
 
+  // ── Patient self-access (my own records) ────────────────────────────────────
+
+  Future<List<PatientMedicalRecordModel>> getMyMedicalRecords({
+    required String accessToken,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/api/v1/patient-data/me/medical-records');
+    final response = await _httpClient.get(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map((item) =>
+              PatientMedicalRecordModel.fromJson(item as Map<String, dynamic>))
+          .toList();
+    }
+
+    if (response.statusCode == 404) {
+      throw const AuthException('No patient record found for your account.');
+    }
+
+    throw AuthException(
+        'Load medical records failed: HTTP ${response.statusCode}');
+  }
+
+  Future<List<int>> downloadMyMedicalRecordFile({
+    required String accessToken,
+    required int recordId,
+  }) async {
+    final uri = Uri.parse(
+        '$_baseUrl/api/v1/patient-data/me/medical-records/$recordId/file');
+    final response = await _httpClient.get(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 200) return response.bodyBytes;
+
+    if (response.statusCode == 404) {
+      throw const AuthException('File not found.');
+    }
+
+    throw AuthException(
+        'Download file failed: HTTP ${response.statusCode}');
+  }
+
+  Future<List<PatientRecordDetailModel>> getMyAnalytics({
+    required String accessToken,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/api/v1/patient-data/me/analytics');
+    final response = await _httpClient.get(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map((item) => PatientRecordDetailModel.fromJson(
+              item as Map<String, dynamic>))
+          .toList();
+    }
+
+    if (response.statusCode == 404) {
+      throw const AuthException('No patient record found for your account.');
+    }
+
+    throw AuthException(
+        'Load analytics failed: HTTP ${response.statusCode}');
+  }
+
   Future<void> savePatientRecordDetails({
     required String accessToken,
     required int patientDataId,

@@ -22,6 +22,7 @@ class PatientAnalyticsPage extends StatefulWidget {
     this.patientMobile = '',
     this.patientCity = '',
     this.patientBirthDate = '',
+    this.readOnly = false,
   });
 
   final int patientDataId;
@@ -30,6 +31,9 @@ class PatientAnalyticsPage extends StatefulWidget {
   final String patientMobile;
   final String patientCity;
   final String patientBirthDate;
+  /// When [readOnly] is true the page loads data via the patient self-access
+  /// endpoint (`/me/analytics`) instead of the staff endpoint.
+  final bool readOnly;
 
   @override
   State<PatientAnalyticsPage> createState() => _PatientAnalyticsPageState();
@@ -77,10 +81,12 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
     }
 
     try {
-      final details = await _repo.getPatientAnalytics(
-        accessToken: token,
-        patientDataId: widget.patientDataId,
-      );
+      final details = widget.readOnly
+          ? await _repo.getMyAnalytics(accessToken: token)
+          : await _repo.getPatientAnalytics(
+              accessToken: token,
+              patientDataId: widget.patientDataId,
+            );
 
       final byParameter = <String, Map<String, List<PatientRecordDetailModel>>>{};
       for (final d in details) {
@@ -166,7 +172,7 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                'Patient Analytics Report',
+                'Patient Medical Records Report',
                 style: pw.TextStyle(
                   fontSize: 18,
                   fontWeight: pw.FontWeight.bold,
@@ -333,14 +339,8 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
         ),
         pw.SizedBox(height: 8),
 
-        // Mini bar chart
-        pw.SizedBox(
-          height: 72,
-          child: pw.CustomPaint(
-            painter: (canvas, size) =>
-                _drawPdfBarChart(canvas, size, points, idealLower, idealUpper),
-          ),
-        ),
+        // Mini bar chart — widget-based vertical bars (reliable across all page sizes)
+        _buildPdfBarChart(points, idealLower, idealUpper),
         pw.SizedBox(height: 6),
 
         // Data table
@@ -366,7 +366,7 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
               final ok = (idealLower == null || val >= idealLower) &&
                   (idealUpper == null || val <= idealUpper);
               return pw.TableRow(children: [
-                _pdfCell('${p.date.day}/${p.date.month}/${p.date.year}'),
+                _pdfCell(_fmtDate(p.date)),
                 _pdfCell(val.toStringAsFixed(2)),
                 _pdfCell(
                   ok ? 'Normal' : 'Review',
@@ -376,6 +376,109 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
             }),
           ],
         ),
+      ],
+    );
+  }
+
+  /// Widget-based vertical bar chart for PDF.
+  /// Uses [pw.Row] with [pw.Expanded] children so bars fill the full page
+  /// width without needing [pw.CustomPaint] (which requires preferredSize).
+  pw.Widget _buildPdfBarChart(
+    List<_DataPoint> points,
+    double? idealLower,
+    double? idealUpper,
+  ) {
+    if (points.isEmpty) return pw.SizedBox();
+
+    final values = points.map((p) => p.row.readingValue).toList();
+    double minV = values.reduce(math.min);
+    double maxV = values.reduce(math.max);
+    if (idealLower != null) minV = math.min(minV, idealLower);
+    if (idealUpper != null) maxV = math.max(maxV, idealUpper);
+    final range = (maxV - minV).abs();
+    final pad = range * 0.12 + 1;
+    final effMin = minV - pad;
+    final effMax = maxV + pad;
+    final effRange = effMax - effMin;
+
+    const chartH = 56.0; // points (≈ 2 cm)
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+      children: [
+        // Bar area — bars grow upward via CrossAxisAlignment.end
+        pw.SizedBox(
+          height: chartH,
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: points.map((p) {
+              final val = p.row.readingValue;
+              final normalized =
+                  ((val - effMin) / effRange).clamp(0.0, 1.0);
+              final barH = math.max(normalized * chartH, 2.0);
+              final ok = (idealLower == null || val >= idealLower) &&
+                  (idealUpper == null || val <= idealUpper);
+              return pw.Expanded(
+                child: pw.Padding(
+                  padding:
+                      const pw.EdgeInsets.symmetric(horizontal: 2),
+                  child: pw.Column(
+                    mainAxisAlignment: pw.MainAxisAlignment.end,
+                    children: [
+                      pw.Container(
+                        height: barH,
+                        decoration: pw.BoxDecoration(
+                          color: ok
+                              ? PdfColors.blue600
+                              : PdfColors.orange,
+                          borderRadius: pw.BorderRadius.only(
+                            topLeft: const pw.Radius.circular(2),
+                            topRight: const pw.Radius.circular(2),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        // Baseline rule
+        pw.Container(height: 0.6, color: PdfColors.blueGrey300),
+        pw.SizedBox(height: 3),
+        // X-axis date labels
+        pw.Row(
+          children: points.map((p) {
+            return pw.Expanded(
+              child: pw.Text(
+                _fmtDate(p.date),
+                style: pw.TextStyle(
+                    fontSize: 6, color: PdfColors.blueGrey600),
+                textAlign: pw.TextAlign.center,
+              ),
+            );
+          }).toList(),
+        ),
+        // Ideal range legend
+        if (idealLower != null || idealUpper != null)
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 3),
+            child: pw.Row(
+              children: [
+                pw.Container(
+                    width: 10,
+                    height: 1.5,
+                    color: PdfColors.green700),
+                pw.SizedBox(width: 4),
+                pw.Text(
+                  'Ideal: ${idealLower?.toStringAsFixed(1) ?? '–'} – ${idealUpper?.toStringAsFixed(1) ?? '–'}',
+                  style: pw.TextStyle(
+                      fontSize: 7, color: PdfColors.green800),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -636,9 +739,25 @@ class _ThreeDBarChartCard extends StatelessWidget {
               ),
             ),
 
-            // ── Data table ───────────────────────────────────────────
-            const SizedBox(height: 12),
-            _buildDataTable(context, points, idealLower, idealUpper),
+            // ── Data table (collapsible) ─────────────────────────────
+            const SizedBox(height: 4),
+            Theme(
+              data: Theme.of(context).copyWith(
+                dividerColor: Colors.transparent,
+              ),
+              child: ExpansionTile(
+                title: const Text(
+                  'View Data',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                initiallyExpanded: false,
+                children: [
+                  _buildDataTable(context, points, idealLower, idealUpper),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -687,7 +806,7 @@ class _ThreeDBarChartCard extends StatelessWidget {
               ),
             ),
             children: [
-              _td('${p.date.day}/${p.date.month}/${p.date.year}'),
+              _td(_fmtDate(p.date)),
               _td(val.toStringAsFixed(2)),
               Padding(
                 padding:
@@ -901,7 +1020,7 @@ class _ThreeDBarPainter extends CustomPainter {
 
       // X-axis date label
       final dt = points[i].date;
-      final lbl = '${dt.day}/${dt.month}\n${dt.year.toString().substring(2)}';
+      final lbl = _fmtDate(dt);
       final dTp = TextPainter(
         text: TextSpan(
           text: lbl,
@@ -939,84 +1058,7 @@ class _ThreeDBarPainter extends CustomPainter {
 
 // ─── PDF bar chart painter (top-level function — pw.CustomPainter is a typedef)─
 
-void _drawPdfBarChart(
-  PdfGraphics canvas,
-  PdfPoint size,
-  List<_DataPoint> points,
-  double? idealLower,
-  double? idealUpper,
-) {
-  if (points.isEmpty) return;
-
-  final values = points.map((p) => p.row.readingValue).toList();
-  double minV = values.reduce(math.min);
-  double maxV = values.reduce(math.max);
-  if (idealLower != null) minV = math.min(minV, idealLower);
-  if (idealUpper != null) maxV = math.max(maxV, idealUpper);
-  final range = (maxV - minV).abs();
-  final pad = range * 0.12 + 1;
-  final effMin = minV - pad;
-  final effMax = maxV + pad;
-  final effRange = effMax - effMin;
-
-  // PDF coordinate system: y=0 at bottom, y increases upward.
-  final chartH = size.y;
-
-  double toY(double v) => (v - effMin) / effRange * chartH;
-
-  final n = points.length;
-  final slotW = size.x / n;
-  final barW = (slotW * 0.6).clamp(4.0, 40.0);
-
-  // Ideal range fill
-  if (idealLower != null && idealUpper != null) {
-    canvas.setFillColor(PdfColors.green50);
-    final y1 = toY(idealLower);
-    final y2 = toY(idealUpper);
-    canvas.drawRect(0, y1, size.x, y2 - y1);
-    canvas.fillPath();
-  }
-
-  // Bars (drawn from y=0 upward)
-  for (int i = 0; i < n; i++) {
-    final value = points[i].row.readingValue;
-    final ok = (idealLower == null || value >= idealLower) &&
-        (idealUpper == null || value <= idealUpper);
-    final barH = toY(value);
-    final barX = i * slotW + (slotW - barW) / 2;
-
-    canvas.setFillColor(ok ? PdfColors.blue600 : PdfColors.orange);
-    canvas.drawRect(barX, 0, barW, barH);
-    canvas.fillPath();
-  }
-
-  // Ideal range reference lines
-  if (idealLower != null) {
-    final y = toY(idealLower);
-    canvas.setStrokeColor(PdfColors.green700);
-    canvas.setLineWidth(0.8);
-    canvas.moveTo(0, y);
-    canvas.lineTo(size.x, y);
-    canvas.strokePath();
-  }
-  if (idealUpper != null) {
-    final y = toY(idealUpper);
-    canvas.setStrokeColor(PdfColors.green700);
-    canvas.setLineWidth(0.8);
-    canvas.moveTo(0, y);
-    canvas.lineTo(size.x, y);
-    canvas.strokePath();
-  }
-
-  // Baseline
-  canvas.setStrokeColor(PdfColors.grey400);
-  canvas.setLineWidth(0.5);
-  canvas.moveTo(0, 0);
-  canvas.lineTo(size.x, 0);
-  canvas.strokePath();
-}
-
-// ─── Line chart card (unchanged) ──────────────────────────────────────────────
+// ─── Line chart card ──────────────────────────────────────────────────────────
 
 class _KeywordChartCard extends StatefulWidget {
   const _KeywordChartCard({required this.keyword, required this.rows});
@@ -1187,7 +1229,7 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
                           return SideTitleWidget(
                             meta: meta,
                             child: Text(
-                              '${dt.day}/${dt.month}\n${dt.year}',
+                              _fmtDate(dt),
                               style: Theme.of(context)
                                   .textTheme
                                   .labelSmall
@@ -1273,7 +1315,7 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
                         final dt = epoch.add(Duration(
                             minutes: (spot.x * 1440).round()));
                         return LineTooltipItem(
-                          '${spot.y.toStringAsFixed(2)}\n${dt.day}/${dt.month}/${dt.year}',
+                          '${spot.y.toStringAsFixed(2)}\n${_fmtDate(dt)}',
                           TextStyle(
                             color: colorScheme.onInverseSurface,
                             fontSize: 12,
@@ -1349,8 +1391,24 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            _buildDataTable(context, points, idealLower, idealUpper),
+            const SizedBox(height: 4),
+            Theme(
+              data: Theme.of(context).copyWith(
+                dividerColor: Colors.transparent,
+              ),
+              child: ExpansionTile(
+                title: const Text(
+                  'View Data',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                initiallyExpanded: false,
+                children: [
+                  _buildDataTable(context, points, idealLower, idealUpper),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -1399,7 +1457,7 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
               ),
             ),
             children: [
-              _th2('${p.date.day}/${p.date.month}/${p.date.year}'),
+              _th2(_fmtDate(p.date)),
               _th2(val.toStringAsFixed(2)),
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -1442,6 +1500,18 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
+
+/// Formats a [DateTime] as `dd-MMM-yy` (e.g. `03-Apr-25`).
+String _fmtDate(DateTime dt) {
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  final d = dt.day.toString().padLeft(2, '0');
+  final m = months[dt.month - 1];
+  final y = dt.year.toString().substring(2);
+  return '$d-$m-$y';
+}
 
 class _DataPoint {
   const _DataPoint({required this.date, required this.row});

@@ -17,10 +17,14 @@ class PatientMedicalRecordsPage extends StatefulWidget {
     super.key,
     required this.patientDataId,
     required this.patientName,
+    this.readOnly = false,
   });
 
   final int patientDataId;
   final String patientName;
+  /// When [readOnly] is true the page uses the patient self-access endpoints
+  /// and hides upload / edit / delete controls.
+  final bool readOnly;
 
   @override
   State<PatientMedicalRecordsPage> createState() =>
@@ -68,10 +72,12 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
     });
 
     try {
-      final list = await _repo.listPatientMedicalRecords(
-        accessToken: token,
-        patientDataId: widget.patientDataId,
-      );
+      final list = widget.readOnly
+          ? await _repo.getMyMedicalRecords(accessToken: token)
+          : await _repo.listPatientMedicalRecords(
+              accessToken: token,
+              patientDataId: widget.patientDataId,
+            );
       if (!mounted) return;
       setState(() {
         _records = list;
@@ -96,7 +102,10 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
     Navigator.push(
       context,
       MaterialPageRoute<void>(
-        builder: (_) => DocumentViewerPage(record: r),
+        builder: (_) => DocumentViewerPage(
+          record: r,
+          readOnly: widget.readOnly,
+        ),
       ),
     );
   }
@@ -686,11 +695,13 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _loading ? null : _showUploadSheet,
-        icon: const Icon(Icons.upload_file),
-        label: const Text('Upload'),
-      ),
+      floatingActionButton: widget.readOnly
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _loading ? null : _showUploadSheet,
+              icon: const Icon(Icons.upload_file),
+              label: const Text('Upload'),
+            ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -719,10 +730,14 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
                   child: _records.isEmpty
                       ? ListView(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          children: const [
-                            SizedBox(height: 120),
+                          children: [
+                            const SizedBox(height: 120),
                             Center(
-                              child: Text('No documents yet. Tap Upload.'),
+                              child: Text(
+                                widget.readOnly
+                                    ? 'No medical records found.'
+                                    : 'No documents yet. Tap Upload.',
+                              ),
                             ),
                           ],
                         )
@@ -752,23 +767,30 @@ class _PatientMedicalRecordsPageState extends State<PatientMedicalRecordsPage> {
                                   '${r.comments?.isNotEmpty == true ? r.comments! : 'No comments'}',
                                 ),
                                 isThreeLine: true,
-                                trailing: PopupMenuButton<_MedicalRecordAction>(
-                                  onSelected: (action) => _handleRecordAction(action, r),
-                                  itemBuilder: (context) => const [
-                                    PopupMenuItem(
-                                      value: _MedicalRecordAction.view,
-                                      child: Text('Open'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: _MedicalRecordAction.edit,
-                                      child: Text('Edit'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: _MedicalRecordAction.delete,
-                                      child: Text('Delete'),
-                                    ),
-                                  ],
-                                ),
+                                trailing: widget.readOnly
+                                    ? IconButton(
+                                        icon: const Icon(Icons.open_in_new),
+                                        tooltip: 'Open',
+                                        onPressed: () => _openViewer(r),
+                                      )
+                                    : PopupMenuButton<_MedicalRecordAction>(
+                                        onSelected: (action) =>
+                                            _handleRecordAction(action, r),
+                                        itemBuilder: (context) => const [
+                                          PopupMenuItem(
+                                            value: _MedicalRecordAction.view,
+                                            child: Text('Open'),
+                                          ),
+                                          PopupMenuItem(
+                                            value: _MedicalRecordAction.edit,
+                                            child: Text('Edit'),
+                                          ),
+                                          PopupMenuItem(
+                                            value: _MedicalRecordAction.delete,
+                                            child: Text('Delete'),
+                                          ),
+                                        ],
+                                      ),
                                 onTap: () => _openViewer(r),
                               ),
                             );
