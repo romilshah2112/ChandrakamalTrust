@@ -50,13 +50,9 @@ workflows:
       vars:
         # ── App identifiers ────────────────────────────────────────────────
         BUNDLE_ID: "com.optimahealthcare.optimaHealthcareMobile"
-        # Numeric App ID from App Store Connect → App Information
-        # Leave empty until the app is registered; publishing will be skipped.
-        APP_STORE_APP_ID: ""
 
         # ── Runtime config ─────────────────────────────────────────────────
-        # Baked into the binary via --dart-define at build time.
-        # Override here or via a Codemagic environment group for staging builds.
+        # Baked into the binary at build time via --dart-define.
         API_BASE_URL: "https://optimahealthapp-production.up.railway.app"
 
         # ── Build metadata ──────────────────────────────────────────────────
