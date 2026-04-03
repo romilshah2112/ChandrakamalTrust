@@ -90,12 +90,12 @@ workflows:
           pod install --repo-update
 
       # ── 3. Code signing ───────────────────────────────────────────────────
-      # Uses Codemagic's built-in App Store Connect integration to:
-      #   • Fetch / auto-create the Distribution certificate from Apple
-      #   • Fetch / auto-create the App Store provisioning profile
-      #   • Install both into the macOS keychain
-      #   • Patch Runner.xcodeproj to use Manual signing with those files
-      #   • Write /Users/builder/export_options.plist for xcodebuild
+      # • Reuses your existing Apple Distribution certificate (same account).
+      # • Fetches / auto-creates an App Store provisioning profile for this
+      #   bundle ID and signs it with that certificate.
+      # • xcode-project use-profiles patches Runner.xcodeproj to Manual signing
+      #   and writes the export options plist, storing its path in
+      #   $CM_EXPORT_OPTIONS_PATH (used in the build step below).
       - name: iOS — set up code signing
         script: |
           keychain initialize
@@ -108,6 +108,13 @@ workflows:
           keychain add-certificates
           xcode-project use-profiles
 
+          # Confirm which signing identity and profile are active (visible in logs)
+          echo "=== Installed code-signing identities ==="
+          security find-identity -v -p codesigning
+          echo "=== Export options plist path ==="
+          echo "$CM_EXPORT_OPTIONS_PATH"
+          cat "$CM_EXPORT_OPTIONS_PATH"
+
       # ── 4. Build IPA ──────────────────────────────────────────────────────
       - name: Flutter — build IPA (release)
         script: |
@@ -117,11 +124,13 @@ workflows:
           # uploaded to App Store Connect has a unique CFBundleVersion.
           BUILD_NUMBER=$PROJECT_BUILD_NUMBER
 
+          # $CM_EXPORT_OPTIONS_PATH is set by "xcode-project use-profiles" above.
+          # It contains method=app-store and the correct provisioning profile name.
           flutter build ipa \
             --release \
             --build-number="$BUILD_NUMBER" \
             --dart-define=API_BASE_URL="$API_BASE_URL" \
-            --export-options-plist=/Users/builder/export_options.plist
+            --export-options-plist="$CM_EXPORT_OPTIONS_PATH"
 
     # ── Artifacts to collect ─────────────────────────────────────────────────
     artifacts:
@@ -206,7 +215,7 @@ workflows:
             --release \
             --build-number="$PROJECT_BUILD_NUMBER" \
             --dart-define=API_BASE_URL="$API_BASE_URL" \
-            --export-options-plist=/Users/builder/export_options.plist
+            --export-options-plist="$CM_EXPORT_OPTIONS_PATH"
 
     artifacts:
       - mobile/build/ios/ipa/*.ipa
