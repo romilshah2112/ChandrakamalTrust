@@ -100,19 +100,23 @@ workflows:
         script: |
           keychain initialize
 
+          # Pass all four credentials explicitly so missing variables fail early
+          # with a clear message rather than a cryptic signing error.
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
+            --issuer-id="$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id="$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --private-key=@env:APP_STORE_CONNECT_PRIVATE_KEY \
             --certificate-key=@env:CERTIFICATE_PRIVATE_KEY \
             --create
 
           keychain add-certificates
           xcode-project use-profiles
 
-          # Confirm which signing identity and profile are active (visible in logs)
+          # Print active identities and export options to help diagnose issues
           echo "=== Installed code-signing identities ==="
           security find-identity -v -p codesigning
-          echo "=== Export options plist path ==="
-          echo "$CM_EXPORT_OPTIONS_PATH"
+          echo "=== Export options ==="
           cat "$CM_EXPORT_OPTIONS_PATH"
 
       # ── 4. Build IPA ──────────────────────────────────────────────────────
@@ -202,6 +206,9 @@ workflows:
 
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_ADHOC \
+            --issuer-id="$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id="$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --private-key=@env:APP_STORE_CONNECT_PRIVATE_KEY \
             --certificate-key=@env:CERTIFICATE_PRIVATE_KEY \
             --create
 
