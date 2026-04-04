@@ -9,6 +9,8 @@ backend/temp_build/
 # Environment files
 .env
 .env.*
+backend/src/Api/appsettings.Local.json
+backend/src/Api/appsettings.*.Local.json
 
 # OS/editor
 .DS_Store

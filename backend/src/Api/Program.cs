@@ -11,6 +11,13 @@ using OptimaHealthcare.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Configuration
+    .AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true)
+    .AddJsonFile(
+        $"appsettings.{builder.Environment.EnvironmentName}.Local.json",
+        optional: true,
+        reloadOnChange: true);
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
