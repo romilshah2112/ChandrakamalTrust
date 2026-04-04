@@ -10,7 +10,7 @@ class BrandLogo extends StatelessWidget {
   final double height;
   final bool showFallbackText;
 
-  static const String _assetPath = 'assets/images/Chandra_logo.png';
+  static const String _assetPath = 'assets/images/Trust_logo.jpg';
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +29,7 @@ class BrandLogo extends StatelessWidget {
               Icon(Icons.favorite, color: Theme.of(context).colorScheme.primary),
               const SizedBox(width: 6),
               Text(
-                'Padam Heart Care Centre',
+                'Chandrakamal Memorial Trust',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ],
