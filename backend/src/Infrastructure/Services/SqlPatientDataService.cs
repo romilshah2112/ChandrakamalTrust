@@ -7,6 +7,10 @@ namespace OptimaHealthcare.Infrastructure.Services;
 
 public sealed class SqlPatientDataService : IPatientDataService
 {
+    private const int DefaultCreateReferenceTypeId = 6;
+    private const string DefaultCreateReferenceName = "HealthCamp";
+    private const int StaffVisibleReferenceTypeId = 6;
+
     private readonly string _connectionString;
     private readonly IImageStorageService _imageStorageService;
 
@@ -26,6 +30,8 @@ public sealed class SqlPatientDataService : IPatientDataService
         await connection.OpenAsync(cancellationToken);
 
         var imageName = await ResolveImageNameAsync(request, cancellationToken);
+        var referenceTypeId = DefaultCreateReferenceTypeId;
+        var referenceName = DefaultCreateReferenceName;
 
         const string sql = @"
 INSERT INTO [patientdata]
@@ -48,8 +54,8 @@ VALUES
         command.Parameters.AddWithValue("@createdDate", DateTime.UtcNow.Date);
         command.Parameters.AddWithValue("@imageName", (object?)imageName ?? DBNull.Value);
         command.Parameters.AddWithValue("@appUserId", request.AppUserId);
-        command.Parameters.AddWithValue("@referenceTypeId", request.ReferenceTypeId);
-        command.Parameters.AddWithValue("@referenceName", request.ReferenceName);
+        command.Parameters.AddWithValue("@referenceTypeId", referenceTypeId);
+        command.Parameters.AddWithValue("@referenceName", referenceName);
         command.Parameters.AddWithValue("@isActive", true);
 
         var insertedId = await command.ExecuteScalarAsync(cancellationToken);
@@ -103,10 +109,11 @@ WHERE [lPatientDataId] = @patientDataId";
         };
     }
 
-    public async Task<IReadOnlyList<PatientListItemResponse>> ListAsync(string? query, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PatientListItemResponse>> ListAsync(string? query, string? roleName, CancellationToken cancellationToken)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
+        var restrictToHealthCamp = ShouldRestrictToHealthCamp(roleName);
 
 const string sql = @"
 SELECT
@@ -117,10 +124,13 @@ WHERE (@query IS NULL OR @query = ''
     OR [LastName] LIKE '%' + @query + '%'
     OR [Email] LIKE '%' + @query + '%'
     OR CAST([MobileNo] AS nvarchar(30)) LIKE '%' + @query + '%')
+  AND (@restrictToHealthCamp = 0 OR [lReferenceTypeId] = @healthCampReferenceTypeId)
 ORDER BY [CreatedDate] DESC, [lPatientDataId] DESC";
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@query", (object?)query ?? DBNull.Value);
+        command.Parameters.AddWithValue("@restrictToHealthCamp", restrictToHealthCamp ? 1 : 0);
+        command.Parameters.AddWithValue("@healthCampReferenceTypeId", StaffVisibleReferenceTypeId);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var items = new List<PatientListItemResponse>();
@@ -141,20 +151,24 @@ ORDER BY [CreatedDate] DESC, [lPatientDataId] DESC";
         return items;
     }
 
-    public async Task<PatientDataResponse?> GetByIdAsync(int patientDataId, CancellationToken cancellationToken)
+    public async Task<PatientDataResponse?> GetByIdAsync(int patientDataId, string? roleName, CancellationToken cancellationToken)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
+        var restrictToHealthCamp = ShouldRestrictToHealthCamp(roleName);
 
         const string sql = @"
 SELECT
     [lPatientDataId], [FirstName], [LastName], [MobileNo], [Email], [Address], [Gender], [City],
     [BirthDate], [CreatedDate], [ImageName], [lAppUserId], [lReferenceTypeId], [ReferenceName], [IsActive]
 FROM [patientdata]
-WHERE [lPatientDataId] = @patientDataId";
+WHERE [lPatientDataId] = @patientDataId
+  AND (@restrictToHealthCamp = 0 OR [lReferenceTypeId] = @healthCampReferenceTypeId)";
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@patientDataId", patientDataId);
+        command.Parameters.AddWithValue("@restrictToHealthCamp", restrictToHealthCamp ? 1 : 0);
+        command.Parameters.AddWithValue("@healthCampReferenceTypeId", StaffVisibleReferenceTypeId);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
@@ -288,6 +302,17 @@ WHERE [lPatientDataId] = @patientDataId
         await linkCommand.ExecuteNonQueryAsync(cancellationToken);
 
         return patientDataId;
+    }
+
+    private static bool ShouldRestrictToHealthCamp(string? roleName)
+    {
+        if (string.IsNullOrWhiteSpace(roleName))
+        {
+            return false;
+        }
+
+        return roleName.Contains("receptionist", StringComparison.OrdinalIgnoreCase)
+            || roleName.Contains("staff", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<bool> UpdateAsync(int patientDataId, PatientDataUpdateRequest request, CancellationToken cancellationToken)

@@ -154,7 +154,7 @@ public sealed class PatientAppointmentsController : ControllerBase
             return Forbid();
         }
 
-        return Ok(await _patientDataService.ListAsync(null, cancellationToken));
+        return Ok(await _patientDataService.ListAsync(null, User.GetRoleName(), cancellationToken));
     }
 
     [HttpGet("lookups/doctors")]

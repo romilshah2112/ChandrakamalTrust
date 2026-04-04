@@ -34,6 +34,15 @@ class _DocumentViewerPageState extends State<DocumentViewerPage>
 
   late final TabController _tabController;
 
+  bool get _hideExtractedValuesForRole {
+    if (widget.readOnly) {
+      return true;
+    }
+
+    final role = (AuthSession.role ?? '').toLowerCase();
+    return role.contains('staff') || role.contains('receptionist');
+  }
+
   Uint8List? _bytes;
   String? _fetchError;
   bool _loadingDocument = true;
@@ -87,13 +96,13 @@ class _DocumentViewerPageState extends State<DocumentViewerPage>
   @override
   void initState() {
     super.initState();
-    // Read-only (patient) view: only the document tab is shown.
+    // Patient self-view and staff/reception view only expose the document tab.
     _tabController = TabController(
-      length: widget.readOnly ? 1 : 2,
+      length: _hideExtractedValuesForRole ? 1 : 2,
       vsync: this,
     );
     _fetchDocument();
-    if (!widget.readOnly) {
+    if (!_hideExtractedValuesForRole) {
       _fetchRecordKeywords();
       _fetchOcrPreview();
     }
@@ -554,7 +563,9 @@ class _DocumentViewerPageState extends State<DocumentViewerPage>
               ],
         bottom: widget.readOnly
             ? null
-            : TabBar(
+            : _hideExtractedValuesForRole
+                ? null
+                : TabBar(
                 controller: _tabController,
                 tabs: const [
                   Tab(text: 'Document'),
@@ -585,7 +596,7 @@ class _DocumentViewerPageState extends State<DocumentViewerPage>
               controller: _tabController,
               children: [
                 _buildDocumentTab(),
-                if (!widget.readOnly) _buildExtractedValuesTab(),
+                if (!_hideExtractedValuesForRole) _buildExtractedValuesTab(),
               ],
             ),
           ),

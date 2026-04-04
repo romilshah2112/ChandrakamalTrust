@@ -35,6 +35,11 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
     return role;
   }
 
+  bool _showStaffAnalytics(String role) {
+    final normalized = role.toLowerCase();
+    return normalized.contains('receptionist') || normalized.contains('staff');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -60,6 +65,12 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
               icon: const Icon(Icons.insights_outlined),
               tooltip: 'Analytics',
               onPressed: () => Navigator.of(context).pushNamed(AppRouter.doctorAnalytics),
+            ),
+          if (_showStaffAnalytics(role))
+            IconButton(
+              icon: const Icon(Icons.bar_chart_outlined),
+              tooltip: 'Patient Analytics',
+              onPressed: () => Navigator.of(context).pushNamed(AppRouter.staffAnalytics),
             ),
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
@@ -146,6 +157,15 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
                 Navigator.of(context).pushNamed(AppRouter.viewPatients);
               },
             ),
+            if (_showStaffAnalytics(role))
+              ListTile(
+                leading: const Icon(Icons.bar_chart_outlined),
+                title: const Text('Patient Analytics'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).pushNamed(AppRouter.staffAnalytics);
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.calendar_month),
               title: const Text('Appointments'),
@@ -254,6 +274,14 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
                 onTap: () =>
                     Navigator.of(context).pushNamed(AppRouter.viewPatients),
               ),
+              if (_showStaffAnalytics(role))
+                QuickActionItem(
+                  icon: Icons.bar_chart,
+                  label: 'Analytics',
+                  color: AppTheme.accentGreen,
+                  onTap: () =>
+                      Navigator.of(context).pushNamed(AppRouter.staffAnalytics),
+                ),
               QuickActionItem(
                 icon: Icons.calendar_month,
                 label: 'Appointments',

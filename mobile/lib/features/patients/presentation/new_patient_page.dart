@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:optima_healthcare_mobile/features/appointments/models/lookup_option_model.dart';
 import 'package:optima_healthcare_mobile/features/auth/models/auth_session.dart';
 import 'package:optima_healthcare_mobile/features/patients/data/patient_repository.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_create_request.dart';
@@ -17,17 +16,15 @@ class NewPatientPage extends StatefulWidget {
 }
 
 class _NewPatientPageState extends State<NewPatientPage> {
-  static const int _maxImageBytes = 50 * 1024;
+  static const int _maxImageBytes = 100 * 1024;
+  static const int _defaultReferenceTypeId = 6;
+  static const String _defaultReferenceName = 'HealthCamp';
 
   final _formKey = GlobalKey<FormState>();
   final _repo = PatientRepository();
   final _picker = ImagePicker();
 
   static const List<String> _genderOptions = ['Male', 'Female', 'Transgender'];
-  static const List<String> _monthNames = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
 
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
@@ -35,14 +32,9 @@ class _NewPatientPageState extends State<NewPatientPage> {
   final _email = TextEditingController();
   final _address = TextEditingController();
   final _city = TextEditingController();
-  final _referenceName = TextEditingController();
+  final _age = TextEditingController();
 
   String? _selectedGender;
-  DateTime? _selectedBirthDate;
-  List<LookupOptionModel> _referenceTypes = [];
-  int? _selectedReferenceTypeId;
-  bool _referenceTypesLoading = true;
-  String? _referenceTypesError;
 
   bool _saving = false;
   String? _message;
@@ -54,42 +46,11 @@ class _NewPatientPageState extends State<NewPatientPage> {
   @override
   void initState() {
     super.initState();
-    _loadReferenceTypes();
   }
 
-  Future<void> _loadReferenceTypes() async {
-    final token = AuthSession.accessToken;
-    if (token == null) {
-      setState(() {
-        _referenceTypesLoading = false;
-        _referenceTypesError = 'Not signed in';
-      });
-      return;
-    }
-    try {
-      final list = await _repo.getReferenceTypes(accessToken: token);
-      setState(() {
-        _referenceTypes = list;
-        _referenceTypesLoading = false;
-        _referenceTypesError = null;
-        if (_selectedReferenceTypeId == null && list.isNotEmpty) {
-          _selectedReferenceTypeId = list.first.id;
-        }
-      });
-    } catch (e) {
-      setState(() {
-        _referenceTypesLoading = false;
-        _referenceTypesError = e.toString();
-      });
-    }
-  }
-
-  String _formatBirthDate(DateTime d) {
-    return '${d.day.toString().padLeft(2, '0')}-${_monthNames[d.month - 1]}-${d.year}';
-  }
-
-  String _birthDateToApi(DateTime d) {
-    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  String _ageToApiBirthDate(int age) {
+    final year = DateTime.now().year - age;
+    return '$year-01-01';
   }
 
   @override
@@ -100,7 +61,7 @@ class _NewPatientPageState extends State<NewPatientPage> {
     _email.dispose();
     _address.dispose();
     _city.dispose();
-    _referenceName.dispose();
+    _age.dispose();
     super.dispose();
   }
 
@@ -121,7 +82,7 @@ class _NewPatientPageState extends State<NewPatientPage> {
       if (compressed == null || compressed.length > _maxImageBytes) {
         setState(() {
           _error =
-              'Unable to compress image below 50KB. Please choose a smaller image.';
+              'Unable to compress image below 100KB. Please choose a smaller image.';
         });
         return;
       }
@@ -212,15 +173,11 @@ class _NewPatientPageState extends State<NewPatientPage> {
       setState(() => _error = 'Please select Gender.');
       return;
     }
-    if (_selectedBirthDate == null) {
-      setState(() => _error = 'Please select Birth Date.');
+    final age = int.tryParse(_age.text.trim());
+    if (age == null || age < 0 || age > 130) {
+      setState(() => _error = 'Please enter a valid Age.');
       return;
     }
-    if (_selectedReferenceTypeId == null) {
-      setState(() => _error = 'Please select Reference.');
-      return;
-    }
-
     setState(() {
       _saving = true;
       _error = null;
@@ -238,15 +195,15 @@ class _NewPatientPageState extends State<NewPatientPage> {
           address: _address.text.trim(),
           gender: _selectedGender!,
           city: _city.text.trim(),
-          birthDate: _birthDateToApi(_selectedBirthDate!),
+          birthDate: _ageToApiBirthDate(age),
           imageName: null,
           imageBase64: _profileImageBytes == null
               ? null
               : base64Encode(_profileImageBytes!),
           imageFileName: _profileImageFileName,
           imageContentType: _profileImageContentType,
-          referenceTypeId: _selectedReferenceTypeId!,
-          referenceName: _referenceName.text.trim(),
+          referenceTypeId: _defaultReferenceTypeId,
+          referenceName: _defaultReferenceName,
         ),
       );
 
@@ -269,12 +226,8 @@ class _NewPatientPageState extends State<NewPatientPage> {
       _email.clear();
       _address.clear();
       _city.clear();
-      _referenceName.clear();
+      _age.clear();
       _selectedGender = null;
-      _selectedBirthDate = null;
-      _selectedReferenceTypeId = _referenceTypes.isNotEmpty
-          ? _referenceTypes.first.id
-          : null;
       _clearSelectedImage();
     } catch (ex) {
       final message = ex.toString().replaceFirst('Exception: ', '');
@@ -330,9 +283,7 @@ class _NewPatientPageState extends State<NewPatientPage> {
               _field(_address, 'Address'),
               _genderDropdown(),
               _field(_city, 'City'),
-              _birthDateField(),
-              _referenceDropdown(),
-              _field(_referenceName, 'Reference Name'),
+              _field(_age, 'Age', numeric: true),
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -396,89 +347,6 @@ class _NewPatientPageState extends State<NewPatientPage> {
     );
   }
 
-  Future<void> _pickBirthDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedBirthDate ?? DateTime.now(),
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) {
-      setState(() => _selectedBirthDate = picked);
-    }
-  }
-
-  Widget _birthDateField() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: InkWell(
-        onTap: _saving ? null : _pickBirthDate,
-        child: InputDecorator(
-          decoration: InputDecoration(
-            labelText: 'Birth Date (DD-MMM-YYYY)',
-            border: const OutlineInputBorder(),
-          ),
-          child: Text(
-            _selectedBirthDate == null
-                ? 'Tap to select date'
-                : _formatBirthDate(_selectedBirthDate!),
-            style: TextStyle(
-              color: _selectedBirthDate == null
-                  ? Theme.of(context).hintColor
-                  : null,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _referenceDropdown() {
-    if (_referenceTypesLoading) {
-      return const Padding(
-        padding: EdgeInsets.only(bottom: 10),
-        child: LinearProgressIndicator(),
-      );
-    }
-    if (_referenceTypesError != null) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Text(
-          _referenceTypesError!,
-          style: const TextStyle(color: Colors.orange),
-        ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: DropdownButtonFormField<int>(
-        value: _selectedReferenceTypeId,
-        decoration: const InputDecoration(
-          labelText: 'Reference',
-          border: OutlineInputBorder(),
-        ),
-        hint: const Text('Select Reference'),
-        items: _referenceTypes
-            .map(
-              (rt) => DropdownMenuItem(
-                value: rt.id,
-                child: Text(rt.name),
-              ),
-            )
-            .toList(),
-        onChanged: _saving
-            ? null
-            : (value) {
-                setState(() => _selectedReferenceTypeId = value);
-              },
-        validator: (value) {
-          if (value == null) return 'Required';
-          return null;
-        },
-      ),
-    );
-  }
-
   Widget _field(
     TextEditingController controller,
     String label, {
@@ -503,6 +371,12 @@ class _NewPatientPageState extends State<NewPatientPage> {
           }
           if (numeric && int.tryParse(value.trim()) == null) {
             return 'Must be numeric';
+          }
+          if (label == 'Age') {
+            final parsed = int.tryParse(value.trim());
+            if (parsed == null || parsed < 0 || parsed > 130) {
+              return 'Enter a valid age';
+            }
           }
           return null;
         },
@@ -531,7 +405,7 @@ class _NewPatientPageState extends State<NewPatientPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Upload a patient photo under 50KB if available.',
+                'Upload a patient photo under 100KB if available.',
                 style: Theme.of(context).textTheme.bodySmall,
                 textAlign: TextAlign.center,
               ),

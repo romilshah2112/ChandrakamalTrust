@@ -12,6 +12,7 @@ import 'package:optima_healthcare_mobile/features/auth/presentation/profile_page
 import 'package:optima_healthcare_mobile/features/auth/presentation/receptionist_dashboard_screen.dart';
 import 'package:optima_healthcare_mobile/features/auth/presentation/user_dashboard_screen.dart';
 import 'package:optima_healthcare_mobile/features/doctor_analytics/presentation/doctor_analytics_page.dart';
+import 'package:optima_healthcare_mobile/features/staff_analytics/presentation/staff_analytics_page.dart';
 import 'package:optima_healthcare_mobile/features/auth/presentation/splash_screen.dart';
 import 'package:optima_healthcare_mobile/features/invoices/presentation/invoices_page.dart';
 import 'package:optima_healthcare_mobile/features/patients/presentation/my_patient_details_page.dart';
@@ -44,6 +45,7 @@ class AppRouter {
   static const String invoices = '/invoices';
   static const String consultation = '/consultation';
   static const String doctorAnalytics = '/doctor-analytics';
+  static const String staffAnalytics = '/staff-analytics';
 
   static Map<String, WidgetBuilder> get routes => {
     splash: (_) => const SplashScreen(),
@@ -70,6 +72,7 @@ class AppRouter {
     invoices: (_) => const InvoicesPage(),
     consultation: (_) => const ConsultationPage(),
     doctorAnalytics: (_) => const DoctorAnalyticsPage(),
+    staffAnalytics: (_) => const StaffAnalyticsPage(),
   };
 
   static String routeForRole(String role) {

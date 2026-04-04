@@ -5,6 +5,7 @@ import 'package:optima_healthcare_mobile/features/patients/presentation/patient_
 import 'package:optima_healthcare_mobile/features/patients/data/patient_repository.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_detail.dart';
 import 'package:optima_healthcare_mobile/features/patients/presentation/patient_analytics_page.dart';
+import 'package:optima_healthcare_mobile/features/patients/presentation/patient_complaints_page.dart';
 import 'package:optima_healthcare_mobile/features/patients/presentation/patient_medical_records_page.dart';
 import 'package:optima_healthcare_mobile/features/patients/presentation/patient_vitals_page.dart';
 
@@ -23,6 +24,16 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
   String? _error;
   PatientDetailModel? _patient;
   bool _deleting = false;
+
+  int _calculateAge(String rawBirthDate) {
+    final parsed = DateTime.tryParse(rawBirthDate.trim());
+    if (parsed == null) {
+      return 0;
+    }
+
+    final age = DateTime.now().year - parsed.year;
+    return age < 0 ? 0 : age;
+  }
 
   @override
   void initState() {
@@ -169,6 +180,21 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
     );
   }
 
+  Future<void> _navigateToComplaints() async {
+    if (_patient == null) {
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => PatientComplaintsPage(
+          patientDataId: widget.patientDataId,
+          patientName: '${_patient!.firstName} ${_patient!.lastName}'.trim(),
+        ),
+      ),
+    );
+  }
+
   Future<void> _navigateToAnalytics() async {
     if (_patient == null) return;
 
@@ -237,6 +263,11 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
               onPressed: _loading || _deleting ? null : _navigateToMedicalRecords,
             ),
             IconButton(
+              icon: const Icon(Icons.sick_outlined),
+              tooltip: 'Complaints',
+              onPressed: _loading || _deleting ? null : _navigateToComplaints,
+            ),
+            IconButton(
               icon: const Icon(Icons.insights_outlined),
               tooltip: 'Analytics',
               onPressed: _loading || _deleting ? null : _navigateToAnalytics,
@@ -286,7 +317,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
                         _item('Address', _patient!.address),
                         _item('Gender', _patient!.gender),
                         _item('City', _patient!.city),
-                        _item('Birth Date', _patient!.birthDate),
+                        _item('Age', '${_calculateAge(_patient!.birthDate)}'),
                         _item('Created Date', _patient!.createdDate),
                         _item('Reference', _patient!.referenceName),
                         _item('Active', _patient!.isActive ? 'Yes' : 'No'),
@@ -305,6 +336,11 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
                               onPressed: _navigateToMedicalRecords,
                               icon: const Icon(Icons.folder_shared_outlined),
                               label: const Text('Medical records'),
+                            ),
+                            FilledButton.icon(
+                              onPressed: _navigateToComplaints,
+                              icon: const Icon(Icons.sick_outlined),
+                              label: const Text('Complaints'),
                             ),
                             FilledButton.icon(
                               onPressed: _navigateToAnalytics,

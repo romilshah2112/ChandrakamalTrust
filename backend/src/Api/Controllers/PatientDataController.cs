@@ -110,7 +110,7 @@ public sealed class PatientDataController : ControllerBase
             return Forbid();
         }
 
-        var patient = await _patientDataService.GetByIdAsync(id, cancellationToken);
+        var patient = await _patientDataService.GetByIdAsync(id, User.GetRoleName(), cancellationToken);
         if (patient is null)
         {
             return NotFound();
@@ -184,7 +184,7 @@ public sealed class PatientDataController : ControllerBase
             return Forbid();
         }
 
-        var list = await _patientDataService.ListAsync(query, cancellationToken);
+        var list = await _patientDataService.ListAsync(query, User.GetRoleName(), cancellationToken);
         return Ok(list);
     }
 

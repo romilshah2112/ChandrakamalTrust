@@ -16,6 +16,8 @@ import 'package:optima_healthcare_mobile/features/auth/models/user_role_option.d
 import 'package:optima_healthcare_mobile/features/doctor_analytics/models/doctor_dashboard_analytics_model.dart';
 import 'package:optima_healthcare_mobile/features/invoices/models/patient_invoice_model.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_contact_update_request.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/patient_complaint_model.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/patient_complaint_save_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_create_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_data_update_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_detail.dart';
@@ -27,6 +29,7 @@ import 'package:optima_healthcare_mobile/features/patients/models/save_patient_m
 import 'package:optima_healthcare_mobile/features/patients/models/update_patient_medical_record_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_vitals_model.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_vitals_save_request.dart';
+import 'package:optima_healthcare_mobile/features/staff_analytics/models/staff_dashboard_analytics_model.dart';
 
 class ApiClient {
   ApiClient({http.Client? httpClient})
@@ -36,7 +39,7 @@ class ApiClient {
 
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://optimahealthapp-production.up.railway.app',
+    defaultValue: 'https://chandrakamaltrust-production.up.railway.app',
   );
 
   Future<LoginResponseModel> login({
@@ -873,6 +876,172 @@ class ApiClient {
     );
   }
 
+  Future<List<PatientComplaintModel>> listPatientComplaints({
+    required String accessToken,
+    required int patientDataId,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/patient-data/$patientDataId/complaints',
+    );
+    final response = await _httpClient.get(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map(
+            (item) =>
+                PatientComplaintModel.fromJson(item as Map<String, dynamic>),
+          )
+          .toList();
+    }
+
+    if (response.statusCode == 400) {
+      final body = response.body.trim();
+      throw AuthException(body.isEmpty ? 'Invalid patient id.' : body);
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException(
+        'You are not allowed to view patient complaints.',
+      );
+    }
+
+    throw AuthException(
+      'List patient complaints failed: HTTP ${response.statusCode}',
+    );
+  }
+
+  Future<void> createPatientComplaint({
+    required String accessToken,
+    required int patientDataId,
+    required PatientComplaintSaveRequestModel request,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/patient-data/$patientDataId/complaints',
+    );
+    final response = await _httpClient.post(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(request.toJson()),
+    );
+
+    if (response.statusCode == 201) {
+      return;
+    }
+
+    if (response.statusCode == 400) {
+      final body = response.body.trim();
+      throw AuthException(body.isEmpty ? 'Invalid complaint details.' : body);
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException(
+        'You are not allowed to add patient complaints.',
+      );
+    }
+
+    throw AuthException(
+      'Create patient complaint failed: HTTP ${response.statusCode}',
+    );
+  }
+
+  Future<void> updatePatientComplaint({
+    required String accessToken,
+    required int patientComplaintId,
+    required PatientComplaintSaveRequestModel request,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/patient-complaints/$patientComplaintId',
+    );
+    final response = await _httpClient.put(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(request.toJson()),
+    );
+
+    if (response.statusCode == 204) {
+      return;
+    }
+
+    if (response.statusCode == 404) {
+      throw const AuthException('Patient complaint not found.');
+    }
+
+    if (response.statusCode == 400) {
+      final body = response.body.trim();
+      throw AuthException(body.isEmpty ? 'Invalid complaint details.' : body);
+    }
+
+    throw AuthException(
+      'Update patient complaint failed: HTTP ${response.statusCode}',
+    );
+  }
+
+  Future<void> deletePatientComplaint({
+    required String accessToken,
+    required int patientComplaintId,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/patient-complaints/$patientComplaintId',
+    );
+    final response = await _httpClient.delete(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 204) {
+      return;
+    }
+
+    if (response.statusCode == 404) {
+      throw const AuthException('Patient complaint not found.');
+    }
+
+    throw AuthException(
+      'Delete patient complaint failed: HTTP ${response.statusCode}',
+    );
+  }
+
+  Future<List<LookupOptionModel>> getComplaintSeverities({
+    required String accessToken,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/api/v1/patient-complaints/lookups/severities');
+    final response = await _httpClient.get(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map((item) {
+            final map = item as Map<String, dynamic>;
+            return LookupOptionModel(
+              id: (map['id'] as num).toInt(),
+              name: map['name'] as String? ?? '',
+            );
+          })
+          .toList();
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException('You are not allowed to view severities.');
+    }
+
+    throw AuthException(
+      'Get complaint severities failed: HTTP ${response.statusCode}',
+    );
+  }
+
   Future<List<LookupOptionModel>> getReferenceTypes({
     required String accessToken,
   }) async {
@@ -1478,6 +1647,22 @@ class ApiClient {
 
     final map = jsonDecode(response.body) as Map<String, dynamic>;
     return DoctorDashboardAnalyticsModel.fromJson(map);
+  }
+
+  Future<StaffDashboardAnalyticsModel> getStaffDashboardAnalytics({
+    required String accessToken,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse('$_baseUrl/api/v1/staff-analytics/dashboard'),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode != 200) {
+      throw _toAuthException('Load staff analytics failed', response);
+    }
+
+    final map = jsonDecode(response.body) as Map<String, dynamic>;
+    return StaffDashboardAnalyticsModel.fromJson(map);
   }
 
   Future<void> saveAppointment({

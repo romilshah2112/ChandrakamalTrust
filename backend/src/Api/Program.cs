@@ -38,6 +38,8 @@ builder.Services.AddCors(options =>
 builder.Services.AddScoped<IPatientReadService, InMemoryPatientReadService>();
 builder.Services.AddScoped<IPatientDataService, SqlPatientDataService>();
 builder.Services.AddScoped<IPatientVitalsService, SqlPatientVitalsService>();
+builder.Services.AddScoped<IPatientComplaintService, SqlPatientComplaintService>();
+builder.Services.AddScoped<ISeverityService, SqlSeverityService>();
 builder.Services.AddScoped<IReferenceTypeService, SqlReferenceTypeService>();
 builder.Services.AddScoped<IRecordTypeService, SqlRecordTypeService>();
 builder.Services.AddScoped<IRecordKeywordService, SqlRecordKeywordService>();
@@ -47,6 +49,7 @@ builder.Services.AddScoped<IImageStorageService, CloudinaryImageStorageService>(
 builder.Services.AddScoped<IPatientAppointmentService, SqlPatientAppointmentService>();
 builder.Services.AddScoped<IInvoiceService, SqlInvoiceService>();
 builder.Services.AddScoped<IDoctorAnalyticsService, SqlDoctorAnalyticsService>();
+builder.Services.AddScoped<IStaffAnalyticsService, SqlStaffAnalyticsService>();
 builder.Services.AddScoped<IMasterDataService, SqlMasterDataService>();
 builder.Services.AddScoped<IUserAuthService, SqlAppUserAuthService>();
 builder.Services.AddScoped<IPasswordCryptoService, LegacyPasswordCryptoService>();

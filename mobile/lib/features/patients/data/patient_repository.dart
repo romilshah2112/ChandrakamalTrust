@@ -1,6 +1,8 @@
 import 'package:optima_healthcare_mobile/core/network/api_client.dart';
 import 'package:optima_healthcare_mobile/features/appointments/models/lookup_option_model.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_contact_update_request.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/patient_complaint_model.dart';
+import 'package:optima_healthcare_mobile/features/patients/models/patient_complaint_save_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_create_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_data_update_request.dart';
 import 'package:optima_healthcare_mobile/features/patients/models/patient_detail.dart';
@@ -35,6 +37,12 @@ class PatientRepository {
     required String accessToken,
   }) {
     return _apiClient.getRecordTypes(accessToken: accessToken);
+  }
+
+  Future<List<LookupOptionModel>> getComplaintSeverities({
+    required String accessToken,
+  }) {
+    return _apiClient.getComplaintSeverities(accessToken: accessToken);
   }
 
   Future<List<PatientMedicalRecordModel>> listPatientMedicalRecords({
@@ -217,6 +225,50 @@ class PatientRepository {
     return _apiClient.deletePatient(
       accessToken: accessToken,
       patientDataId: patientDataId,
+    );
+  }
+
+  Future<List<PatientComplaintModel>> listPatientComplaints({
+    required String accessToken,
+    required int patientDataId,
+  }) {
+    return _apiClient.listPatientComplaints(
+      accessToken: accessToken,
+      patientDataId: patientDataId,
+    );
+  }
+
+  Future<void> createPatientComplaint({
+    required String accessToken,
+    required int patientDataId,
+    required PatientComplaintSaveRequestModel request,
+  }) {
+    return _apiClient.createPatientComplaint(
+      accessToken: accessToken,
+      patientDataId: patientDataId,
+      request: request,
+    );
+  }
+
+  Future<void> updatePatientComplaint({
+    required String accessToken,
+    required int patientComplaintId,
+    required PatientComplaintSaveRequestModel request,
+  }) {
+    return _apiClient.updatePatientComplaint(
+      accessToken: accessToken,
+      patientComplaintId: patientComplaintId,
+      request: request,
+    );
+  }
+
+  Future<void> deletePatientComplaint({
+    required String accessToken,
+    required int patientComplaintId,
+  }) {
+    return _apiClient.deletePatientComplaint(
+      accessToken: accessToken,
+      patientComplaintId: patientComplaintId,
     );
   }
 

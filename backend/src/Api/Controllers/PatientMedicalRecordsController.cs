@@ -158,7 +158,7 @@ public sealed class PatientMedicalRecordsController : ControllerBase
             return Unauthorized();
         }
 
-        var patient = await _patientDataService.GetByIdAsync(patientDataId, cancellationToken);
+        var patient = await _patientDataService.GetByIdAsync(patientDataId, User.GetRoleName(), cancellationToken);
         if (patient is null)
         {
             return NotFound();
@@ -289,7 +289,7 @@ public sealed class PatientMedicalRecordsController : ControllerBase
             return Forbid();
         }
 
-        var patient = await _patientDataService.GetByIdAsync(patientDataId, cancellationToken);
+        var patient = await _patientDataService.GetByIdAsync(patientDataId, User.GetRoleName(), cancellationToken);
         if (patient is null)
         {
             return NotFound();
@@ -313,7 +313,7 @@ public sealed class PatientMedicalRecordsController : ControllerBase
             return Forbid();
         }
 
-        var patient = await _patientDataService.GetByIdAsync(patientDataId, cancellationToken);
+        var patient = await _patientDataService.GetByIdAsync(patientDataId, User.GetRoleName(), cancellationToken);
         if (patient is null)
         {
             return NotFound();

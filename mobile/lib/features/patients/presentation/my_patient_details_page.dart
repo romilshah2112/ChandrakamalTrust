@@ -80,14 +80,14 @@ class _MyPatientDetailsPageState extends State<MyPatientDetailsPage> {
     final emailController = TextEditingController(text: _patient!.email);
     final addressController = TextEditingController(text: _patient!.address);
     final cityController = TextEditingController(text: _patient!.city);
+    String? dialogError;
+    bool saving = false;
 
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            String? dialogError;
-            bool saving = false;
             return AlertDialog(
               title: const Text('Update contact details'),
               content: SingleChildScrollView(
@@ -281,6 +281,16 @@ class _MyPatientDetailsPageState extends State<MyPatientDetailsPage> {
     return '$day-$month-$year';
   }
 
+  int _calculateAge(String rawBirthDate) {
+    final parsed = DateTime.tryParse(rawBirthDate.trim());
+    if (parsed == null) {
+      return 0;
+    }
+
+    final age = DateTime.now().year - parsed.year;
+    return age < 0 ? 0 : age;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -328,7 +338,7 @@ class _MyPatientDetailsPageState extends State<MyPatientDetailsPage> {
                         _item('Address', _patient!.address),
                         _item('Gender', _patient!.gender),
                         _item('City', _patient!.city),
-                        _item('Birth Date', _formatDate(_patient!.birthDate)),
+                        _item('Age', '${_calculateAge(_patient!.birthDate)}'),
                         _item('Created Date', _formatDate(_patient!.createdDate)),
                         _item('Reference', _patient!.referenceName),
                         _item('Active', _patient!.isActive ? 'Yes' : 'No'),
