@@ -26,12 +26,27 @@ public sealed class SqlStaffAnalyticsService : IStaffAnalyticsService
         var patientsByGender = await LoadPatientsByGenderAsync(con, cancellationToken);
         var patientsByAgeGroup = await LoadPatientsByAgeGroupAsync(con, cancellationToken);
         var patientsByCity = await LoadPatientsByCityAsync(con, cancellationToken);
+        var patientsByBPSystolicRange = await LoadPatientsByVitalsRangeAsync(
+            con,
+            "BPSys",
+            cancellationToken);
+        var patientsByBPDiastolicRange = await LoadPatientsByVitalsRangeAsync(
+            con,
+            "BPDys",
+            cancellationToken);
+        var patientsByBloodSugarRange = await LoadPatientsByVitalsRangeAsync(
+            con,
+            "BloodSugar",
+            cancellationToken);
 
         return new StaffDashboardAnalyticsDto
         {
             PatientsByGender = patientsByGender,
             PatientsByAgeGroup = patientsByAgeGroup,
             PatientsByCity = patientsByCity,
+            PatientsByBPSystolicRange = patientsByBPSystolicRange,
+            PatientsByBPDiastolicRange = patientsByBPDiastolicRange,
+            PatientsByBloodSugarRange = patientsByBloodSugarRange,
         };
     }
 
@@ -111,6 +126,51 @@ GROUP BY
 ORDER BY [Value] DESC, [Label]";
 
         return await LoadPointsAsync(con, sql, cancellationToken);
+    }
+
+    private static async Task<IReadOnlyList<AnalyticsPointDto>> LoadPatientsByVitalsRangeAsync(
+        SqlConnection con,
+        string metricColumn,
+        CancellationToken cancellationToken)
+    {
+        var sql = $@"
+WITH RankedVitals AS (
+    SELECT
+        pv.[lPatientDataId],
+        pv.[{metricColumn}] AS [MetricValue],
+        ROW_NUMBER() OVER (
+            PARTITION BY pv.[lPatientDataId]
+            ORDER BY pv.[InsertedOn] DESC, pv.[lPatientVitalsId] DESC
+        ) AS [RowNum]
+    FROM [PatientVitals] pv
+    INNER JOIN [patientdata] pd ON pd.[lPatientDataId] = pv.[lPatientDataId]
+    WHERE ISNULL(pd.[IsActive], 1) = 1
+      AND pd.[lReferenceTypeId] = @healthCampReferenceTypeId
+      AND ISNULL(pv.[IsActive], 1) = 1
+),
+Bucketed AS (
+    SELECT
+        CASE
+            WHEN [MetricValue] < 80 THEN '< 80'
+            WHEN [MetricValue] >= 80 AND [MetricValue] < 100 THEN '80 - 100'
+            WHEN [MetricValue] >= 100 AND [MetricValue] < 120 THEN '100 - 120'
+            WHEN [MetricValue] >= 120 AND [MetricValue] < 140 THEN '120 - 140'
+            WHEN [MetricValue] >= 140 AND [MetricValue] <= 160 THEN '140 - 160'
+            WHEN [MetricValue] > 160 THEN '> 160'
+            ELSE 'Unknown'
+        END AS [Label]
+    FROM RankedVitals
+    WHERE [RowNum] = 1
+)
+SELECT [Label], COUNT(1) AS [Value]
+FROM Bucketed
+GROUP BY [Label]";
+
+        var points = await LoadPointsAsync(con, sql, cancellationToken);
+        var orderedLabels = new[] { "< 80", "80 - 100", "100 - 120", "120 - 140", "140 - 160", "> 160", "Unknown" };
+        return orderedLabels
+            .Select(label => points.FirstOrDefault(point => point.Label == label) ?? new AnalyticsPointDto { Label = label, Value = 0 })
+            .ToList();
     }
 
     private static async Task<IReadOnlyList<AnalyticsPointDto>> LoadPointsAsync(

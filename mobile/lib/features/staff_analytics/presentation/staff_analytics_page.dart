@@ -89,6 +89,27 @@ class _StaffAnalyticsPageState extends State<StaffAnalyticsPage> {
                           ),
                           const SizedBox(height: 16),
                           _ChartCard(
+                            title: 'Patients by BP Systolic',
+                            child: _ThreeDVerticalBarChart(
+                              data: analytics.patientsByBPSystolicRange,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _ChartCard(
+                            title: 'Patients by BP Diastolic',
+                            child: _ThreeDVerticalBarChart(
+                              data: analytics.patientsByBPDiastolicRange,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _ChartCard(
+                            title: 'Patients by Blood Sugar',
+                            child: _ThreeDVerticalBarChart(
+                              data: analytics.patientsByBloodSugarRange,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _ChartCard(
                             title: 'Patients by City',
                             child: _HorizontalCountChart(
                               data: analytics.patientsByCity,
@@ -408,3 +429,4 @@ const _chartPalette = [
   Color(0xFFF4A261),
   Color(0xFF6D597A),
 ];
+

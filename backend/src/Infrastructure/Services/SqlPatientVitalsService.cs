@@ -19,7 +19,7 @@ public sealed class SqlPatientVitalsService : IPatientVitalsService
     public async Task<IReadOnlyList<PatientVitalsDto>> ListByPatientAsync(int patientDataId, CancellationToken cancellationToken)
     {
         const string sql = @"
-SELECT [lPatientVitalsId], [lPatientDataId], [BPSys], [BPDys], [Pulse], [WeightKG], [InsertedOn], [InsertedBy], [HeightCMS], [IsActive]
+SELECT [lPatientVitalsId], [lPatientDataId], [BPSys], [BPDys], [BloodSugar], [Pulse], [WeightKG], [InsertedOn], [InsertedBy], [HeightCMS], [IsActive]
 FROM [PatientVitals]
 WHERE [lPatientDataId] = @patientDataId
   AND [IsActive] = 1
@@ -58,9 +58,9 @@ WHERE [lPatientVitalsId] = @id";
     public async Task<int> CreateAsync(SavePatientVitalsRequest request, int insertedByAppUserId, CancellationToken cancellationToken)
     {
         const string sql = @"
-INSERT INTO [PatientVitals]([lPatientDataId], [BPSys], [BPDys], [Pulse], [WeightKG], [InsertedOn], [InsertedBy], [HeightCMS], [IsActive])
+INSERT INTO [PatientVitals]([lPatientDataId], [BPSys], [BPDys], [BloodSugar], [Pulse], [WeightKG], [InsertedOn], [InsertedBy], [HeightCMS], [IsActive])
 OUTPUT INSERTED.[lPatientVitalsId]
-VALUES(@patientDataId, @bpSys, @bpDys, @pulse, @weightKg, @insertedOn, @insertedBy, @heightCms, @isActive)";
+VALUES(@patientDataId, @bpSys, @bpDys, @bloodSugar, @pulse, @weightKg, @insertedOn, @insertedBy, @heightCms, @isActive)";
 
         await using var con = new SqlConnection(_connectionString);
         await con.OpenAsync(cancellationToken);
@@ -80,6 +80,7 @@ VALUES(@patientDataId, @bpSys, @bpDys, @pulse, @weightKg, @insertedOn, @inserted
 UPDATE [PatientVitals]
 SET [BPSys] = @bpSys,
     [BPDys] = @bpDys,
+    [BloodSugar] = @bloodSugar,
     [Pulse] = @pulse,
     [WeightKG] = @weightKg,
     [HeightCMS] = @heightCms,
@@ -118,6 +119,7 @@ WHERE [lPatientVitalsId] = @id";
         cmd.Parameters.AddWithValue("@patientDataId", request.PatientDataId);
         cmd.Parameters.AddWithValue("@bpSys", request.BPSys);
         cmd.Parameters.AddWithValue("@bpDys", request.BPDys);
+        cmd.Parameters.AddWithValue("@bloodSugar", request.BloodSugar);
         cmd.Parameters.AddWithValue("@pulse", request.Pulse);
         cmd.Parameters.AddWithValue("@weightKg", request.WeightKG);
         cmd.Parameters.AddWithValue("@heightCms", request.HeightCMS);
@@ -144,6 +146,7 @@ WHERE [lPatientVitalsId] = @id";
             PatientDataId = SafeInt(reader["lPatientDataId"]),
             BPSys = SafeInt(reader["BPSys"]),
             BPDys = SafeInt(reader["BPDys"]),
+            BloodSugar = SafeInt(reader["BloodSugar"]),
             Pulse = SafeInt(reader["Pulse"]),
             WeightKG = SafeInt(reader["WeightKG"]),
             HeightCMS = SafeInt(reader["HeightCMS"]),

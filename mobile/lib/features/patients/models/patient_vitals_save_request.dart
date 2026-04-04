@@ -3,6 +3,7 @@ class PatientVitalsSaveRequestModel {
     required this.patientDataId,
     required this.bpSys,
     required this.bpDys,
+    required this.bloodSugar,
     required this.pulse,
     required this.weightKg,
     required this.heightCms,
@@ -12,6 +13,7 @@ class PatientVitalsSaveRequestModel {
   final int patientDataId;
   final int bpSys;
   final int bpDys;
+  final int bloodSugar;
   final int pulse;
   final int weightKg;
   final int heightCms;
@@ -21,6 +23,7 @@ class PatientVitalsSaveRequestModel {
     'patientDataId': patientDataId,
     'bpSys': bpSys,
     'bpDys': bpDys,
+    'bloodSugar': bloodSugar,
     'pulse': pulse,
     'weightKG': weightKg,
     'heightCMS': heightCms,

@@ -160,9 +160,14 @@ public sealed class PatientVitalsController : ControllerBase
             return "PatientDataId is required.";
         }
 
-        if (request.BPSys <= 0 || request.BPDys <= 0 || request.Pulse <= 0 || request.WeightKG <= 0 || request.HeightCMS <= 0)
+        if (request.BPSys <= 0 ||
+            request.BPDys <= 0 ||
+            request.BloodSugar <= 0 ||
+            request.Pulse <= 0 ||
+            request.WeightKG <= 0 ||
+            request.HeightCMS <= 0)
         {
-            return "Blood pressure, pulse, weight, and height must be greater than zero.";
+            return "Blood pressure, blood sugar, pulse, weight, and height must be greater than zero.";
         }
 
         return null;

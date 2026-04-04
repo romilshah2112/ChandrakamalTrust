@@ -7,7 +7,7 @@ namespace OptimaHealthcare.Infrastructure.Services;
 
 public sealed class CloudinaryImageStorageService : IImageStorageService
 {
-    private const int MaxBytes = 50 * 1024;
+    private const int MaxBytes = 100 * 1024;
     private const int MaxMedicalDocumentBytes = 20 * 1024 * 1024;
     private const string AssetFolder = "OptimaHealthcare";
     private const string MedicalRecordsFolder = $"{AssetFolder}/Records";
@@ -44,7 +44,7 @@ public sealed class CloudinaryImageStorageService : IImageStorageService
 
         if (bytes.Length > MaxBytes)
         {
-            throw new InvalidOperationException("Patient image must be less than 50KB.");
+            throw new InvalidOperationException("Patient image must be less than 100KB.");
         }
 
         var publicIdPrefix = ResolvePublicIdPrefix(fileName);

@@ -88,6 +88,9 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
     final formKey = GlobalKey<FormState>();
     final bpSys = TextEditingController(text: existing?.bpSys.toString() ?? '');
     final bpDys = TextEditingController(text: existing?.bpDys.toString() ?? '');
+    final bloodSugar = TextEditingController(
+      text: existing?.bloodSugar.toString() ?? latest?.bloodSugar.toString() ?? '',
+    );
     final pulse = TextEditingController(text: existing?.pulse.toString() ?? '');
     final weightKg = TextEditingController(
       text: existing?.weightKg.toString() ?? latest?.weightKg.toString() ?? '',
@@ -113,6 +116,11 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                       _numberField(controller: bpSys, label: 'BP Systolic'),
                       const SizedBox(height: 12),
                       _numberField(controller: bpDys, label: 'BP Diastolic'),
+                      const SizedBox(height: 12),
+                      _numberField(
+                        controller: bloodSugar,
+                        label: 'Blood Sugar (mg/dL)',
+                      ),
                       const SizedBox(height: 12),
                       _numberField(controller: pulse, label: 'Pulse'),
                       const SizedBox(height: 12),
@@ -152,6 +160,7 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                             patientDataId: widget.patientDataId,
                             bpSys: int.parse(bpSys.text.trim()),
                             bpDys: int.parse(bpDys.text.trim()),
+                            bloodSugar: int.parse(bloodSugar.text.trim()),
                             pulse: int.parse(pulse.text.trim()),
                             weightKg: int.parse(weightKg.text.trim()),
                             heightCms: int.parse(heightCms.text.trim()),
@@ -196,6 +205,7 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
 
     bpSys.dispose();
     bpDys.dispose();
+    bloodSugar.dispose();
     pulse.dispose();
     weightKg.dispose();
     heightCms.dispose();
@@ -328,7 +338,7 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
               const Text('No vitals recorded yet.'),
               const SizedBox(height: 8),
               Text(
-                'Add blood pressure, pulse, weight, and height for ${widget.patientName}.',
+                'Add blood pressure, blood sugar, pulse, weight, and height for ${widget.patientName}.',
                 textAlign: TextAlign.center,
               ),
             ],
@@ -381,6 +391,7 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                     runSpacing: 12,
                     children: [
                       _metricChip('BP', '${item.bpSys}/${item.bpDys}'),
+                      _metricChip('Sugar', '${item.bloodSugar} mg/dL'),
                       _metricChip('Pulse', '${item.pulse} bpm'),
                       _metricChip('Weight', '${item.weightKg} kg'),
                       _metricChip('Height', '${item.heightCms} cm'),
@@ -845,6 +856,7 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
           1: FlexColumnWidth(1.4),
           2: FlexColumnWidth(1.4),
           3: FlexColumnWidth(1.4),
+          4: FlexColumnWidth(1.6),
         },
         children: [
           // Header
@@ -854,6 +866,7 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
               _tableCell('Date', header: true),
               _tableCell('Sys', header: true),
               _tableCell('Dias', header: true),
+              _tableCell('Sugar', header: true),
               _tableCell('Status', header: true),
             ],
           ),
@@ -880,6 +893,7 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                       color: sysOk ? null : Colors.red.shade700),
                   _tableCell('${v.bpDys}',
                       color: dysOk ? null : Colors.blue.shade700),
+                  _tableCell('${v.bloodSugar}'),
                   _tableCell(status, color: statusColor),
                 ],
               );
@@ -1154,7 +1168,8 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
         0: pw.FlexColumnWidth(2.5),
         1: pw.FlexColumnWidth(1.2),
         2: pw.FlexColumnWidth(1.2),
-        3: pw.FlexColumnWidth(1.4),
+        3: pw.FlexColumnWidth(1.5),
+        4: pw.FlexColumnWidth(1.4),
       },
       children: [
         pw.TableRow(
@@ -1164,6 +1179,7 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
             _pdfCell('Date', header: true),
             _pdfCell('Systolic', header: true),
             _pdfCell('Diastolic', header: true),
+            _pdfCell('Sugar', header: true),
             _pdfCell('Status', header: true),
           ],
         ),
@@ -1175,6 +1191,7 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                 color: v.bpSys >= 130 ? PdfColors.red700 : null),
             _pdfCell('${v.bpDys} mmHg',
                 color: v.bpDys >= 80 ? PdfColors.blue700 : null),
+            _pdfCell('${v.bloodSugar} mg/dL'),
             _pdfCell(ok ? 'Normal' : 'Review',
                 color: ok ? PdfColors.green700 : PdfColors.orange700),
           ]);

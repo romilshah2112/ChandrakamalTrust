@@ -4,6 +4,7 @@ class PatientVitalsModel {
     required this.patientDataId,
     required this.bpSys,
     required this.bpDys,
+    required this.bloodSugar,
     required this.pulse,
     required this.weightKg,
     required this.heightCms,
@@ -16,6 +17,7 @@ class PatientVitalsModel {
   final int patientDataId;
   final int bpSys;
   final int bpDys;
+  final int bloodSugar;
   final int pulse;
   final int weightKg;
   final int heightCms;
@@ -29,6 +31,7 @@ class PatientVitalsModel {
       patientDataId: (json['patientDataId'] as num?)?.toInt() ?? 0,
       bpSys: (json['bpSys'] as num?)?.toInt() ?? 0,
       bpDys: (json['bpDys'] as num?)?.toInt() ?? 0,
+      bloodSugar: (json['bloodSugar'] as num?)?.toInt() ?? 0,
       pulse: (json['pulse'] as num?)?.toInt() ?? 0,
       weightKg: (json['weightKG'] as num?)?.toInt() ?? 0,
       heightCms: (json['heightCMS'] as num?)?.toInt() ?? 0,

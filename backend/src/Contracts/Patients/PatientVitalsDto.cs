@@ -6,6 +6,7 @@ public sealed class PatientVitalsDto
     public int PatientDataId { get; init; }
     public int BPSys { get; init; }
     public int BPDys { get; init; }
+    public int BloodSugar { get; init; }
     public int Pulse { get; init; }
     public int WeightKG { get; init; }
     public int HeightCMS { get; init; }

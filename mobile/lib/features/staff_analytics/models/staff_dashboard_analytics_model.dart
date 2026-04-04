@@ -19,17 +19,32 @@ class StaffDashboardAnalyticsModel {
     required this.patientsByGender,
     required this.patientsByAgeGroup,
     required this.patientsByCity,
+    required this.patientsByBPSystolicRange,
+    required this.patientsByBPDiastolicRange,
+    required this.patientsByBloodSugarRange,
   });
 
   final List<StaffAnalyticsPointModel> patientsByGender;
   final List<StaffAnalyticsPointModel> patientsByAgeGroup;
   final List<StaffAnalyticsPointModel> patientsByCity;
+  final List<StaffAnalyticsPointModel> patientsByBPSystolicRange;
+  final List<StaffAnalyticsPointModel> patientsByBPDiastolicRange;
+  final List<StaffAnalyticsPointModel> patientsByBloodSugarRange;
 
   factory StaffDashboardAnalyticsModel.fromJson(Map<String, dynamic> json) =>
       StaffDashboardAnalyticsModel(
         patientsByGender: _pointsFromJson(json['patientsByGender']),
         patientsByAgeGroup: _pointsFromJson(json['patientsByAgeGroup']),
         patientsByCity: _pointsFromJson(json['patientsByCity']),
+        patientsByBPSystolicRange: _pointsFromJson(
+          json['patientsByBPSystolicRange'],
+        ),
+        patientsByBPDiastolicRange: _pointsFromJson(
+          json['patientsByBPDiastolicRange'],
+        ),
+        patientsByBloodSugarRange: _pointsFromJson(
+          json['patientsByBloodSugarRange'],
+        ),
       );
 
   static List<StaffAnalyticsPointModel> _pointsFromJson(dynamic value) {

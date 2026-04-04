@@ -16,7 +16,7 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  static const int _maxImageBytes = 50 * 1024;
+  static const int _maxImageBytes = 100 * 1024;
 
   final _repo = UserProfileRepository();
   final _formKey = GlobalKey<FormState>();
@@ -104,7 +104,7 @@ class _ProfilePageState extends State<ProfilePage> {
       if (compressed == null || compressed.length > _maxImageBytes) {
         setState(() {
           _error =
-              'Unable to compress image below 50KB. Please choose a smaller image.';
+              'Unable to compress image below 100KB. Please choose a smaller image.';
         });
         return;
       }
@@ -375,7 +375,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Capture or upload a profile picture under 50KB.',
+            'Capture or upload a profile picture under 100KB.',
             style: Theme.of(context).textTheme.bodySmall,
             textAlign: TextAlign.center,
           ),
