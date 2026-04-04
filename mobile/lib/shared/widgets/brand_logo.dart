@@ -10,7 +10,7 @@ class BrandLogo extends StatelessWidget {
   final double height;
   final bool showFallbackText;
 
-  static const String _assetPath = 'assets/images/padam_logo.png';
+  static const String _assetPath = 'assets/images/Chandra_logo.png';
 
   @override
   Widget build(BuildContext context) {

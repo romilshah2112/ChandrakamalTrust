@@ -388,16 +388,16 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                         },
                         calendarStyle: CalendarStyle(
                           selectedDecoration: const BoxDecoration(
-                            color: AppTheme.brandRed,
+                            color: AppTheme.brandPrimary,
                             shape: BoxShape.circle,
                           ),
                           todayDecoration: BoxDecoration(
-                            color: AppTheme.brandRed.withValues(alpha: 0.3),
+                            color: AppTheme.brandPrimary.withOpacity(0.3),
                             shape: BoxShape.circle,
                           ),
                           outsideDaysVisible: false,
                           markerDecoration: const BoxDecoration(
-                            color: AppTheme.brandRed,
+                            color: AppTheme.brandPrimary,
                             shape: BoxShape.circle,
                           ),
                           markersAlignment: Alignment.bottomCenter,
@@ -454,7 +454,7 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                                         vertical: 2,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: AppTheme.brandRed,
+                                        color: AppTheme.brandPrimary,
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: Text(

@@ -239,7 +239,7 @@ class _LoginScreenState extends State<LoginScreen> {
           const Center(child: BrandLogo(height: 60, showFallbackText: true)),
           const SizedBox(height: 10),
           Text(
-            'Padam Heart Care Centre Login',
+            'Chandrakamal Memorial Trust Login',
             style: Theme.of(context).textTheme.headlineSmall,
             textAlign: TextAlign.center,
           ),
@@ -288,7 +288,7 @@ class _LoginScreenState extends State<LoginScreen> {
               onPressed: _isLoading ? null : _login,
               child: _isLoading
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Login'),
+                  : const Text('Chandrakamal Memorial Trust Login'),
             ),
           ),
           const SizedBox(height: 12),
@@ -403,7 +403,7 @@ class _LoginScreenState extends State<LoginScreen> {
           const SizedBox(height: 12),
           TextButton(
             onPressed: _isLoading ? null : _toggleMode,
-            child: const Text('Back to login'),
+            child: const Text('Back to Chandrakamal Memorial Trust Login'),
           ),
         ],
       ),

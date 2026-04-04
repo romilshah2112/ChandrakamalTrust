@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 /// Theme source: https://www.figma.com/make/krbFqdZPOQqYmuGSE8a4nM/Mobile-App-Theme-Design
-/// Matches Padam Heart Care Centre dashboard: red accent, white header, light background.
+/// Matches Padam Heart Care Centre dashboard: blue accent, white header, light background.
 class AppTheme {
   // Primary (welcome banner, active nav, CTAs, logo accent)
-  static const Color brandRed = Color(0xFFD63030);
+  static const Color brandPrimary = Color(0xFF00B0EC);
   // Header/nav text and icons (inactive)
   static const Color brandCharcoal = Color(0xFF2F3137);
   // Page background
@@ -21,7 +21,7 @@ class AppTheme {
   static ThemeData get light {
     const colorScheme = ColorScheme(
       brightness: Brightness.light,
-      primary: brandRed,
+      primary: brandPrimary,
       onPrimary: Colors.white,
       secondary: brandCharcoal,
       onSecondary: Colors.white,
@@ -63,18 +63,18 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: brandRed, width: 1.4),
+          borderSide: const BorderSide(color: brandPrimary, width: 1.4),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: brandRed,
+          backgroundColor: brandPrimary,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: brandRed),
+        style: TextButton.styleFrom(foregroundColor: brandPrimary),
       ),
       // Outlined/white CTA on red (e.g. "View Progress")
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -87,11 +87,11 @@ class AppTheme {
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: Colors.white,
         elevation: 0,
-        indicatorColor: brandRed.withValues(alpha: 0.15),
+        indicatorColor: brandPrimary.withOpacity(0.15),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return const TextStyle(
-              color: brandRed,
+              color: brandPrimary,
               fontWeight: FontWeight.w600,
               fontSize: 11,
               height: 1.0,
@@ -106,14 +106,14 @@ class AppTheme {
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: brandRed, size: 24);
+            return const IconThemeData(color: brandPrimary, size: 24);
           }
           return const IconThemeData(color: brandCharcoal, size: 24);
         }),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: Colors.white,
-        selectedItemColor: brandRed,
+        selectedItemColor: brandPrimary,
         unselectedItemColor: brandCharcoal,
         type: BottomNavigationBarType.fixed,
         elevation: 0,

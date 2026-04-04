@@ -12,7 +12,7 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  static const _videoAsset = 'assets/video/Padam_Splash.mp4';
+  static const _videoAsset = 'assets/video/Trust_Splash.mp4';
   static const _fallbackDuration = Duration(seconds: 15);
 
   VideoPlayerController? _controller;

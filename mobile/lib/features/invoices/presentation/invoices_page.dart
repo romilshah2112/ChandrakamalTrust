@@ -337,7 +337,7 @@ class _InvoicesPageState extends State<InvoicesPage> {
 
   Future<Uint8List?> _loadLogoBytes() async {
     try {
-      final data = await rootBundle.load('assets/images/padam_logo.png');
+      final data = await rootBundle.load('assets/images/Chandra_logo.png');
       return data.buffer.asUint8List();
     } catch (_) {
       return null;

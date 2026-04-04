@@ -39,4 +39,4 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/Padam_app.png"
+  image_path: "assets/images/Chandra_Logo.png"

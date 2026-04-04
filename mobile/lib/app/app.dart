@@ -8,7 +8,7 @@ class OptimaHealthcareApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Padam Heart Care Centre',
+      title: 'Chandrakamal Memorial Trust',
       theme: AppTheme.light,
       initialRoute: AppRouter.splash,
       routes: AppRouter.routes,
