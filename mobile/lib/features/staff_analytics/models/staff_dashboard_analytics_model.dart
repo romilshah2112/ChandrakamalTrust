@@ -22,6 +22,7 @@ class StaffDashboardAnalyticsModel {
     required this.patientsByBPSystolicRange,
     required this.patientsByBPDiastolicRange,
     required this.patientsByBloodSugarRange,
+    required this.patientsByBmiRange,
   });
 
   final List<StaffAnalyticsPointModel> patientsByGender;
@@ -30,6 +31,7 @@ class StaffDashboardAnalyticsModel {
   final List<StaffAnalyticsPointModel> patientsByBPSystolicRange;
   final List<StaffAnalyticsPointModel> patientsByBPDiastolicRange;
   final List<StaffAnalyticsPointModel> patientsByBloodSugarRange;
+  final List<StaffAnalyticsPointModel> patientsByBmiRange;
 
   factory StaffDashboardAnalyticsModel.fromJson(Map<String, dynamic> json) =>
       StaffDashboardAnalyticsModel(
@@ -45,6 +47,7 @@ class StaffDashboardAnalyticsModel {
         patientsByBloodSugarRange: _pointsFromJson(
           json['patientsByBloodSugarRange'],
         ),
+        patientsByBmiRange: _pointsFromJson(json['patientsByBmiRange']),
       );
 
   static List<StaffAnalyticsPointModel> _pointsFromJson(dynamic value) {

@@ -8,4 +8,5 @@ public sealed class StaffDashboardAnalyticsDto
     public IReadOnlyList<AnalyticsPointDto> PatientsByBPSystolicRange { get; init; } = [];
     public IReadOnlyList<AnalyticsPointDto> PatientsByBPDiastolicRange { get; init; } = [];
     public IReadOnlyList<AnalyticsPointDto> PatientsByBloodSugarRange { get; init; } = [];
+    public IReadOnlyList<AnalyticsPointDto> PatientsByBmiRange { get; init; } = [];
 }

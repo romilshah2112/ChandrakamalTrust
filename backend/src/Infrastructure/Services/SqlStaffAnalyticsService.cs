@@ -31,18 +31,25 @@ public sealed class SqlStaffAnalyticsService : IStaffAnalyticsService
         var patientsByBPSystolicRange = await LoadPatientsByVitalsRangeAsync(
             con,
             "BPSys",
+            "PatientVitalSigns",
+            "lPatientVitalSignsId",
             cleanReferenceName,
             cancellationToken);
         var patientsByBPDiastolicRange = await LoadPatientsByVitalsRangeAsync(
             con,
             "BPDys",
+            "PatientVitalSigns",
+            "lPatientVitalSignsId",
             cleanReferenceName,
             cancellationToken);
         var patientsByBloodSugarRange = await LoadPatientsByVitalsRangeAsync(
             con,
             "BloodSugar",
+            "PatientBloodSugar",
+            "lPatientBloodSugarId",
             cleanReferenceName,
             cancellationToken);
+        var patientsByBmiRange = await LoadPatientsByBmiRangeAsync(con, cleanReferenceName, cancellationToken);
 
         return new StaffDashboardAnalyticsDto
         {
@@ -52,6 +59,7 @@ public sealed class SqlStaffAnalyticsService : IStaffAnalyticsService
             PatientsByBPSystolicRange = patientsByBPSystolicRange,
             PatientsByBPDiastolicRange = patientsByBPDiastolicRange,
             PatientsByBloodSugarRange = patientsByBloodSugarRange,
+            PatientsByBmiRange = patientsByBmiRange,
         };
     }
 
@@ -169,27 +177,75 @@ ORDER BY [Value] DESC, [Label]";
         return await LoadPointsAsync(con, sql, referenceName, cancellationToken);
     }
 
+    private static async Task<IReadOnlyList<AnalyticsPointDto>> LoadPatientsByBmiRangeAsync(
+        SqlConnection con,
+        string? referenceName,
+        CancellationToken cancellationToken)
+    {
+        const string sql = @"
+WITH RankedMeasurements AS (
+    SELECT
+        bm.[lPatientDataId],
+        bm.[BMI] AS [MetricValue],
+        ROW_NUMBER() OVER (
+            PARTITION BY bm.[lPatientDataId]
+            ORDER BY bm.[MeasuredOn] DESC, bm.[lPatientBodyMeasurementId] DESC
+        ) AS [RowNum]
+    FROM [PatientBodyMeasurement] bm
+    INNER JOIN [patientdata] pd ON pd.[lPatientDataId] = bm.[lPatientDataId]
+    WHERE ISNULL(pd.[IsActive], 1) = 1
+      AND pd.[lReferenceTypeId] = @healthCampReferenceTypeId
+      AND (@referenceName IS NULL OR LTRIM(RTRIM(pd.[ReferenceName])) = @referenceName)
+      AND ISNULL(bm.[IsActive], 1) = 1
+      AND bm.[BMI] IS NOT NULL
+      AND bm.[BMI] > 0
+),
+Bucketed AS (
+    SELECT
+        CASE
+            WHEN [MetricValue] < 18.5 THEN '< 18.5'
+            WHEN [MetricValue] >= 18.5 AND [MetricValue] < 25 THEN '18.5 - 24.9'
+            WHEN [MetricValue] >= 25 AND [MetricValue] < 30 THEN '25 - 29.9'
+            WHEN [MetricValue] >= 30 THEN '>= 30'
+            ELSE 'Unknown'
+        END AS [Label]
+    FROM RankedMeasurements
+    WHERE [RowNum] = 1
+)
+SELECT [Label], COUNT(1) AS [Value]
+FROM Bucketed
+GROUP BY [Label]";
+
+        var points = await LoadPointsAsync(con, sql, referenceName, cancellationToken);
+        var orderedLabels = new[] { "< 18.5", "18.5 - 24.9", "25 - 29.9", ">= 30", "Unknown" };
+        return orderedLabels
+            .Select(label => points.FirstOrDefault(point => point.Label == label) ?? new AnalyticsPointDto { Label = label, Value = 0 })
+            .ToList();
+    }
+
     private static async Task<IReadOnlyList<AnalyticsPointDto>> LoadPatientsByVitalsRangeAsync(
         SqlConnection con,
         string metricColumn,
+        string tableName,
+        string idColumn,
         string? referenceName,
         CancellationToken cancellationToken)
     {
         var sql = $@"
 WITH RankedVitals AS (
     SELECT
-        pv.[lPatientDataId],
-        pv.[{metricColumn}] AS [MetricValue],
+        v.[lPatientDataId],
+        v.[{metricColumn}] AS [MetricValue],
         ROW_NUMBER() OVER (
-            PARTITION BY pv.[lPatientDataId]
-            ORDER BY pv.[InsertedOn] DESC, pv.[lPatientVitalsId] DESC
+            PARTITION BY v.[lPatientDataId]
+            ORDER BY v.[MeasuredOn] DESC, v.[{idColumn}] DESC
         ) AS [RowNum]
-    FROM [PatientVitals] pv
-    INNER JOIN [patientdata] pd ON pd.[lPatientDataId] = pv.[lPatientDataId]
+    FROM [{tableName}] v
+    INNER JOIN [patientdata] pd ON pd.[lPatientDataId] = v.[lPatientDataId]
     WHERE ISNULL(pd.[IsActive], 1) = 1
       AND pd.[lReferenceTypeId] = @healthCampReferenceTypeId
       AND (@referenceName IS NULL OR LTRIM(RTRIM(pd.[ReferenceName])) = @referenceName)
-      AND ISNULL(pv.[IsActive], 1) = 1
+      AND ISNULL(v.[IsActive], 1) = 1
 ),
 Bucketed AS (
     SELECT

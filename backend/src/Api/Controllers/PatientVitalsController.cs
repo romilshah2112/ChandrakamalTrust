@@ -160,15 +160,39 @@ public sealed class PatientVitalsController : ControllerBase
             return "PatientDataId is required.";
         }
 
-        if (request.BPSys <= 0 ||
-            request.BPDys <= 0 ||
-            request.BloodSugar <= 0 ||
-            request.Pulse <= 0 ||
-            request.WeightKG <= 0 ||
-            request.HeightCMS <= 0)
+        if (request.MeasuredOn == default)
         {
-            return "Blood pressure, blood sugar, pulse, weight, and height must be greater than zero.";
+            return "MeasuredOn is required.";
         }
+
+        // At least one group must be provided
+        var hasBp = request.BPSys > 0 || request.BPDys > 0 || request.Pulse > 0;
+        var hasSugar = request.BloodSugar > 0;
+        var hasBody = request.WeightKG > 0 || request.HeightCMS > 0;
+        if (!hasBp && !hasSugar && !hasBody)
+        {
+            return "Provide at least one of: Blood Pressure, Blood Sugar, or Body Measurements.";
+        }
+
+        // If BP group partially provided, require all BP fields
+        if (hasBp)
+        {
+            if (request.BPSys <= 0 || request.BPDys <= 0 || request.Pulse <= 0)
+            {
+                return "When adding Blood Pressure, provide Systolic, Diastolic and Pulse.";
+            }
+        }
+
+        // If body measurement partially provided, require both height and weight
+        if (hasBody)
+        {
+            if (request.WeightKG <= 0 || request.HeightCMS <= 0)
+            {
+                return "When adding Body Measurements, provide both Height and Weight.";
+            }
+        }
+
+        // Blood sugar needs value > 0 to be considered provided. Sugar type is optional.
 
         return null;
     }

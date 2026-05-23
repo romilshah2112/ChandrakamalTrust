@@ -28,8 +28,18 @@ class PatientVitalsPage extends StatefulWidget {
 class _PatientVitalsPageState extends State<PatientVitalsPage>
     with SingleTickerProviderStateMixin {
   static const List<String> _monthNames = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   final _repo = PatientRepository();
@@ -53,6 +63,74 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
     _load();
   }
 
+  Future<void> _showAddVitalsMenu() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.monitor_heart),
+            title: const Text('Blood Pressure'),
+            onTap: () {
+              Navigator.of(context).pop();
+              _showBpDialog();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.medical_services),
+            title: const Text('Blood Sugar'),
+            onTap: () {
+              Navigator.of(context).pop();
+              _showBloodSugarDialog();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.fitness_center),
+            title: const Text('Body Measurement'),
+            onTap: () {
+              Navigator.of(context).pop();
+              _showBodyMeasurementDialog();
+            },
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _showEditOptions(PatientVitalsModel item) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.monitor_heart),
+            title: const Text('Edit Blood Pressure'),
+            onTap: () {
+              Navigator.of(context).pop();
+              _showBpDialog(existing: item);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.medical_services),
+            title: const Text('Edit Blood Sugar'),
+            onTap: () {
+              Navigator.of(context).pop();
+              _showBloodSugarDialog(existing: item);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.fitness_center),
+            title: const Text('Edit Body Measurement'),
+            onTap: () {
+              Navigator.of(context).pop();
+              _showBodyMeasurementDialog(existing: item);
+            },
+          ),
+        ]),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -64,40 +142,60 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
   Future<void> _load() async {
     final token = AuthSession.accessToken;
     if (token == null) {
-      setState(() { _loading = false; _error = 'Session expired. Please login again.'; });
+      setState(() {
+        _loading = false;
+        _error = 'Session expired. Please login again.';
+      });
       return;
     }
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final list = await _repo.listPatientVitals(
         accessToken: token,
         patientDataId: widget.patientDataId,
       );
       if (!mounted) return;
-      setState(() { _vitals = list; _loading = false; });
+      setState(() {
+        _vitals = list;
+        _loading = false;
+      });
     } catch (ex) {
       if (!mounted) return;
-      setState(() { _error = ex.toString(); _loading = false; });
+      setState(() {
+        _error = ex.toString();
+        _loading = false;
+      });
     }
   }
 
   // ── Dialogs ──────────────────────────────────────────────────────────────────
 
   Future<void> _showVitalsDialog({PatientVitalsModel? existing}) async {
-    final latest = existing == null && _vitals.isNotEmpty ? _vitals.first : null;
+    final latest = existing == null && _vitals.isNotEmpty
+        ? _vitals.first
+        : null;
     final formKey = GlobalKey<FormState>();
     final bpSys = TextEditingController(text: existing?.bpSys.toString() ?? '');
     final bpDys = TextEditingController(text: existing?.bpDys.toString() ?? '');
     final bloodSugar = TextEditingController(
-      text: existing?.bloodSugar.toString() ?? latest?.bloodSugar.toString() ?? '',
+      text: _formatDecimalForInput(existing?.bloodSugar ?? latest?.bloodSugar),
+    );
+    final sugarType = TextEditingController(
+      text: existing?.sugarType.isNotEmpty == true
+          ? existing!.sugarType
+          : latest?.sugarType ?? 'Random',
     );
     final pulse = TextEditingController(text: existing?.pulse.toString() ?? '');
     final weightKg = TextEditingController(
-      text: existing?.weightKg.toString() ?? latest?.weightKg.toString() ?? '',
+      text: _formatDecimalForInput(existing?.weightKg ?? latest?.weightKg),
     );
     final heightCms = TextEditingController(
-      text: existing?.heightCms.toString() ?? latest?.heightCms.toString() ?? '',
+      text: _formatDecimalForInput(existing?.heightCms ?? latest?.heightCms),
     );
+    var selectedMeasuredOn = existing?.insertedOn.toLocal() ?? DateTime.now();
     var isActive = existing?.isActive ?? true;
 
     final saved = await showDialog<bool>(
@@ -113,20 +211,115 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Blood pressure',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       _numberField(controller: bpSys, label: 'BP Systolic'),
                       const SizedBox(height: 12),
                       _numberField(controller: bpDys, label: 'BP Diastolic'),
                       const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Blood sugar',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       _numberField(
                         controller: bloodSugar,
                         label: 'Blood Sugar (mg/dL)',
+                        decimal: true,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: sugarType,
+                        decoration: const InputDecoration(
+                          labelText: 'Sugar Type',
+                          border: OutlineInputBorder(),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       _numberField(controller: pulse, label: 'Pulse'),
                       const SizedBox(height: 12),
-                      _numberField(controller: weightKg, label: 'Weight (kg)'),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Body measurements',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _numberField(
+                        controller: weightKg,
+                        label: 'Weight (kg)',
+                        decimal: true,
+                      ),
                       const SizedBox(height: 12),
-                      _numberField(controller: heightCms, label: 'Height (cm)'),
+                      _numberField(
+                        controller: heightCms,
+                        label: 'Height (cm)',
+                        decimal: true,
+                      ),
+                      const SizedBox(height: 12),
+                      GestureDetector(
+                        onTap: () async {
+                          // ignore: use_build_context_synchronously
+                          final date = await showDatePicker(
+                            // ignore: use_build_context_synchronously
+                            context: context,
+                            initialDate: selectedMeasuredOn,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime.now(),
+                          );
+                          if (date == null || !mounted) return;
+
+                          // ignore: use_build_context_synchronously
+                          final time = await showTimePicker(
+                            // ignore: use_build_context_synchronously
+                            context: context,
+                            initialTime: TimeOfDay.fromDateTime(selectedMeasuredOn),
+                          );
+                          if (time == null || !mounted) return;
+
+                          setDialogState(() {
+                            selectedMeasuredOn = DateTime(
+                              date.year,
+                              date.month,
+                              date.day,
+                              time.hour,
+                              time.minute,
+                            );
+                          });
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Measured On',
+                            border: OutlineInputBorder(),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(_formatMeasuredOn(selectedMeasuredOn)),
+                              const Icon(Icons.calendar_month),
+                            ],
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
@@ -152,7 +345,10 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                           final token = AuthSession.accessToken;
                           if (token == null) {
                             if (!mounted) return;
-                            setState(() => _error = 'Session expired. Please login again.');
+                            setState(
+                              () => _error =
+                                  'Session expired. Please login again.',
+                            );
                             Navigator.of(context).pop();
                             return;
                           }
@@ -160,13 +356,18 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                             patientDataId: widget.patientDataId,
                             bpSys: int.parse(bpSys.text.trim()),
                             bpDys: int.parse(bpDys.text.trim()),
-                            bloodSugar: int.parse(bloodSugar.text.trim()),
+                            bloodSugar: double.parse(bloodSugar.text.trim()),
+                            sugarType: sugarType.text.trim(),
                             pulse: int.parse(pulse.text.trim()),
-                            weightKg: int.parse(weightKg.text.trim()),
-                            heightCms: int.parse(heightCms.text.trim()),
+                            weightKg: double.parse(weightKg.text.trim()),
+                            heightCms: double.parse(heightCms.text.trim()),
+                            measuredOn: selectedMeasuredOn,
                             isActive: isActive,
                           );
-                          setState(() { _saving = true; _error = null; });
+                          setState(() {
+                            _saving = true;
+                            _error = null;
+                          });
                           try {
                             if (existing == null) {
                               await _repo.createPatientVitals(
@@ -206,6 +407,7 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
     bpSys.dispose();
     bpDys.dispose();
     bloodSugar.dispose();
+    sugarType.dispose();
     pulse.dispose();
     weightKg.dispose();
     heightCms.dispose();
@@ -215,11 +417,382 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(existing == null
-              ? 'Patient vitals saved successfully.'
-              : 'Patient vitals updated successfully.'),
+          content: Text(
+            existing == null
+                ? 'Patient vitals saved successfully.'
+                : 'Patient vitals updated successfully.',
+          ),
         ),
       );
+    }
+  }
+
+  Future<void> _showBpDialog({PatientVitalsModel? existing}) async {
+    final formKey = GlobalKey<FormState>();
+    final bpSys = TextEditingController(text: existing?.bpSys.toString() ?? '');
+    final bpDys = TextEditingController(text: existing?.bpDys.toString() ?? '');
+    final pulse = TextEditingController(text: existing?.pulse.toString() ?? '');
+    var selectedMeasuredOn = existing?.insertedOn.toLocal() ?? DateTime.now();
+    var isActive = existing?.isActive ?? true;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text(existing == null ? 'Add Blood Pressure' : 'Update Blood Pressure'),
+            content: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  _numberField(controller: bpSys, label: 'BP Systolic'),
+                  const SizedBox(height: 12),
+                  _numberField(controller: bpDys, label: 'BP Diastolic'),
+                  const SizedBox(height: 12),
+                  _numberField(controller: pulse, label: 'Pulse'),
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    onTap: () async {
+                      // ignore: use_build_context_synchronously
+                      final date = await showDatePicker(
+                        // ignore: use_build_context_synchronously
+                        context: context,
+                        initialDate: selectedMeasuredOn,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime.now(),
+                      );
+                      if (date == null) return;
+                      if (!mounted) return;
+                      // ignore: use_build_context_synchronously
+                      final time = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.fromDateTime(selectedMeasuredOn),
+                      );
+                      if (time == null) return;
+                      if (!mounted) return;
+                      setDialogState(() {
+                        selectedMeasuredOn = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+                      });
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(labelText: 'Measured On', border: OutlineInputBorder()),
+                      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                        Text(_formatMeasuredOn(selectedMeasuredOn)),
+                        const Icon(Icons.calendar_month),
+                      ]),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Active'),
+                    value: isActive,
+                    onChanged: (value) => setDialogState(() => isActive = value),
+                  ),
+                ]),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: _saving ? null : () => Navigator.of(context).pop(), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: _saving
+                    ? null
+                    : () async {
+                  final navigator = Navigator.of(context);
+                        if (!formKey.currentState!.validate()) return;
+                        final token = AuthSession.accessToken;
+                        if (token == null) {
+                          if (!mounted) return;
+                          setState(() => _error = 'Session expired. Please login again.');
+                          navigator.pop();
+                          return;
+                        }
+
+                        final request = PatientVitalsSaveRequestModel(
+                          patientDataId: widget.patientDataId,
+                          bpSys: int.parse(bpSys.text.trim()),
+                          bpDys: int.parse(bpDys.text.trim()),
+                          bloodSugar: 0,
+                          sugarType: '',
+                          pulse: int.parse(pulse.text.trim()),
+                          weightKg: 0,
+                          heightCms: 0,
+                          measuredOn: selectedMeasuredOn,
+                          isActive: isActive,
+                        );
+
+                        setState(() {
+                          _saving = true;
+                          _error = null;
+                        });
+                        try {
+                          if (existing == null) {
+                            await _repo.createPatientVitals(accessToken: token, patientDataId: widget.patientDataId, request: request);
+                          } else {
+                            await _repo.updatePatientVitals(accessToken: token, patientVitalsId: existing.patientVitalsId, request: request);
+                          }
+                          if (!mounted) return;
+                          navigator.pop(true);
+                        } on AuthException catch (ex) {
+                          if (!mounted) return;
+                          setState(() => _error = ex.message);
+                        } catch (ex) {
+                          if (!mounted) return;
+                          setState(() => _error = ex.toString());
+                        } finally {
+                          if (mounted) setState(() => _saving = false);
+                        }
+                      },
+                child: Text(existing == null ? 'Save' : 'Update'),
+              ),
+            ],
+          );
+        });
+      },
+    );
+
+    bpSys.dispose();
+    bpDys.dispose();
+    pulse.dispose();
+
+    if (saved == true && mounted) {
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(existing == null ? 'Blood pressure saved.' : 'Blood pressure updated.')));
+    }
+  }
+
+  Future<void> _showBloodSugarDialog({PatientVitalsModel? existing}) async {
+    final formKey = GlobalKey<FormState>();
+    final bloodSugar = TextEditingController(text: _formatDecimalForInput(existing?.bloodSugar ?? 0));
+    final sugarType = TextEditingController(text: existing?.sugarType.isNotEmpty == true ? existing!.sugarType : 'Random');
+    var selectedMeasuredOn = existing?.insertedOn.toLocal() ?? DateTime.now();
+    var isActive = existing?.isActive ?? true;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text(existing == null ? 'Add Blood Sugar' : 'Update Blood Sugar'),
+            content: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  _numberField(controller: bloodSugar, label: 'Blood Sugar (mg/dL)', decimal: true),
+                  const SizedBox(height: 12),
+                  TextFormField(controller: sugarType, decoration: const InputDecoration(labelText: 'Sugar Type', border: OutlineInputBorder())),
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    onTap: () async {
+                      // ignore: use_build_context_synchronously
+                      final date = await showDatePicker(
+                        // ignore: use_build_context_synchronously
+                        context: context,
+                        initialDate: selectedMeasuredOn,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime.now(),
+                      );
+                      if (date == null) return;
+                      if (!mounted) return;
+                      // ignore: use_build_context_synchronously
+                      final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(selectedMeasuredOn));
+                      if (time == null) return;
+                      if (!mounted) return;
+                      setDialogState(() {
+                        selectedMeasuredOn = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+                      });
+                    },
+                    child: InputDecorator(decoration: const InputDecoration(labelText: 'Measured On', border: OutlineInputBorder()), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(_formatMeasuredOn(selectedMeasuredOn)), const Icon(Icons.calendar_month)])),
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Active'), value: isActive, onChanged: (v) => setDialogState(() => isActive = v)),
+                ]),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: _saving ? null : () => Navigator.of(context).pop(), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: _saving
+                    ? null
+                    : () async {
+                  final navigator = Navigator.of(context);
+                        if (!formKey.currentState!.validate()) return;
+                        final token = AuthSession.accessToken;
+                        if (token == null) {
+                          if (!mounted) return;
+                          setState(() => _error = 'Session expired. Please login again.');
+                          navigator.pop();
+                          return;
+                        }
+
+                        final request = PatientVitalsSaveRequestModel(
+                          patientDataId: widget.patientDataId,
+                          bpSys: 0,
+                          bpDys: 0,
+                          bloodSugar: double.parse(bloodSugar.text.trim()),
+                          sugarType: sugarType.text.trim(),
+                          pulse: 0,
+                          weightKg: 0,
+                          heightCms: 0,
+                          measuredOn: selectedMeasuredOn,
+                          isActive: isActive,
+                        );
+
+                        setState(() {
+                          _saving = true;
+                          _error = null;
+                        });
+                        try {
+                          if (existing == null) {
+                            await _repo.createPatientVitals(accessToken: token, patientDataId: widget.patientDataId, request: request);
+                          } else {
+                            await _repo.updatePatientVitals(accessToken: token, patientVitalsId: existing.patientVitalsId, request: request);
+                          }
+                          if (!mounted) return;
+                          navigator.pop(true);
+                        } on AuthException catch (ex) {
+                          if (!mounted) return;
+                          setState(() => _error = ex.message);
+                        } catch (ex) {
+                          if (!mounted) return;
+                          setState(() => _error = ex.toString());
+                        } finally {
+                          if (mounted) setState(() => _saving = false);
+                        }
+                      },
+                child: Text(existing == null ? 'Save' : 'Update'),
+              ),
+            ],
+          );
+        });
+      },
+    );
+
+    bloodSugar.dispose();
+    sugarType.dispose();
+
+    if (saved == true && mounted) {
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(existing == null ? 'Blood sugar saved.' : 'Blood sugar updated.')));
+    }
+  }
+
+  Future<void> _showBodyMeasurementDialog({PatientVitalsModel? existing}) async {
+    final formKey = GlobalKey<FormState>();
+    final weightKg = TextEditingController(text: _formatDecimalForInput(existing?.weightKg ?? 0));
+    final heightCms = TextEditingController(text: _formatDecimalForInput(existing?.heightCms ?? 0));
+    var selectedMeasuredOn = existing?.insertedOn.toLocal() ?? DateTime.now();
+    var isActive = existing?.isActive ?? true;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text(existing == null ? 'Add Body Measurement' : 'Update Body Measurement'),
+            content: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  _numberField(controller: weightKg, label: 'Weight (kg)', decimal: true),
+                  const SizedBox(height: 12),
+                  _numberField(controller: heightCms, label: 'Height (cm)', decimal: true),
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    onTap: () async {
+                      // ignore: use_build_context_synchronously
+                      final date = await showDatePicker(
+                        // ignore: use_build_context_synchronously
+                        context: context,
+                        initialDate: selectedMeasuredOn,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime.now(),
+                      );
+                      if (date == null) return;
+                      if (!mounted) return;
+                      // ignore: use_build_context_synchronously
+                      final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(selectedMeasuredOn));
+                      if (time == null) return;
+                      if (!mounted) return;
+                      setDialogState(() {
+                        selectedMeasuredOn = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+                      });
+                    },
+                    child: InputDecorator(decoration: const InputDecoration(labelText: 'Measured On', border: OutlineInputBorder()), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(_formatMeasuredOn(selectedMeasuredOn)), const Icon(Icons.calendar_month)])),
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Active'), value: isActive, onChanged: (v) => setDialogState(() => isActive = v)),
+                ]),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: _saving ? null : () => Navigator.of(context).pop(), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: _saving
+                    ? null
+                    : () async {
+                  final navigator = Navigator.of(context);
+                        if (!formKey.currentState!.validate()) return;
+                        final token = AuthSession.accessToken;
+                        if (token == null) {
+                          if (!mounted) return;
+                          setState(() => _error = 'Session expired. Please login again.');
+                          navigator.pop();
+                          return;
+                        }
+
+                        final request = PatientVitalsSaveRequestModel(
+                          patientDataId: widget.patientDataId,
+                          bpSys: 0,
+                          bpDys: 0,
+                          bloodSugar: 0,
+                          sugarType: '',
+                          pulse: 0,
+                          weightKg: double.parse(weightKg.text.trim()),
+                          heightCms: double.parse(heightCms.text.trim()),
+                          measuredOn: selectedMeasuredOn,
+                          isActive: isActive,
+                        );
+
+                        setState(() {
+                          _saving = true;
+                          _error = null;
+                        });
+                        try {
+                          if (existing == null) {
+                            await _repo.createPatientVitals(accessToken: token, patientDataId: widget.patientDataId, request: request);
+                          } else {
+                            await _repo.updatePatientVitals(accessToken: token, patientVitalsId: existing.patientVitalsId, request: request);
+                          }
+                          if (!mounted) return;
+                          navigator.pop(true);
+                        } on AuthException catch (ex) {
+                          if (!mounted) return;
+                          setState(() => _error = ex.message);
+                        } catch (ex) {
+                          if (!mounted) return;
+                          setState(() => _error = ex.toString());
+                        } finally {
+                          if (mounted) setState(() => _saving = false);
+                        }
+                      },
+                child: Text(existing == null ? 'Save' : 'Update'),
+              ),
+            ],
+          );
+        });
+      },
+    );
+
+    weightKg.dispose();
+    heightCms.dispose();
+
+    if (saved == true && mounted) {
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(existing == null ? 'Body measurement saved.' : 'Body measurement updated.')));
     }
   }
 
@@ -233,7 +806,9 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete vitals?'),
-        content: const Text('This will remove this vitals entry from the list.'),
+        content: const Text(
+          'This will remove this vitals entry from the list.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -248,7 +823,10 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
       ),
     );
     if (confirm != true) return;
-    setState(() { _saving = true; _error = null; });
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await _repo.deletePatientVitals(
         accessToken: token,
@@ -257,8 +835,9 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
       if (!mounted) return;
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Patient vitals deleted.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Patient vitals deleted.')));
     } on AuthException catch (ex) {
       if (!mounted) return;
       setState(() => _error = ex.message);
@@ -275,10 +854,13 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
   Widget _numberField({
     required TextEditingController controller,
     required String label,
+    bool decimal = false,
   }) {
     return TextFormField(
       controller: controller,
-      keyboardType: TextInputType.number,
+      keyboardType: decimal
+          ? const TextInputType.numberWithOptions(decimal: true)
+          : TextInputType.number,
       decoration: InputDecoration(
         labelText: label,
         border: const OutlineInputBorder(),
@@ -286,11 +868,28 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
       validator: (value) {
         final trimmed = value?.trim() ?? '';
         if (trimmed.isEmpty) return 'Required';
-        final parsed = int.tryParse(trimmed);
+        final parsed = decimal
+            ? double.tryParse(trimmed)
+            : int.tryParse(trimmed);
         if (parsed == null || parsed <= 0) return 'Enter a valid number';
         return null;
       },
     );
+  }
+
+  String _formatDecimalForInput(double? value) {
+    if (value == null || value <= 0) return '';
+    return _formatNumber(value);
+  }
+
+  String _formatNumber(double value) {
+    if (value == value.roundToDouble()) {
+      return value.toStringAsFixed(0);
+    }
+    return value
+        .toStringAsFixed(2)
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
   }
 
   String _formatRecordedOn(DateTime value) {
@@ -302,6 +901,16 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
     final minute = ist.minute.toString().padLeft(2, '0');
     final period = ist.hour >= 12 ? 'PM' : 'AM';
     return '$day-$month-$year $hour:$minute $period IST';
+  }
+
+  String _formatMeasuredOn(DateTime value) {
+    final local = value.toLocal();
+    final day = local.day.toString().padLeft(2, '0');
+    final month = _monthNames[local.month - 1];
+    final year = local.year.toString();
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$day-$month-$year $hour:$minute';
   }
 
   /// Short date for chart X-axis labels: `dd-MMM-yy`.
@@ -321,8 +930,11 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(_error!, style: const TextStyle(color: Colors.red),
-              textAlign: TextAlign.center),
+          child: Text(
+            _error!,
+            style: const TextStyle(color: Colors.red),
+            textAlign: TextAlign.center,
+          ),
         ),
       );
     }
@@ -371,16 +983,22 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                         ),
                       ),
                       PopupMenuButton<String>(
-                        onSelected: (value) {
+                        onSelected: (value) async {
                           if (value == 'edit') {
-                            _showVitalsDialog(existing: item);
+                            await _showEditOptions(item);
                           } else if (value == 'delete') {
                             _deleteVitals(item);
                           }
                         },
                         itemBuilder: (context) => const [
-                          PopupMenuItem<String>(value: 'edit', child: Text('Edit')),
-                          PopupMenuItem<String>(value: 'delete', child: Text('Delete')),
+                          PopupMenuItem<String>(
+                            value: 'edit',
+                            child: Text('Edit'),
+                          ),
+                          PopupMenuItem<String>(
+                            value: 'delete',
+                            child: Text('Delete'),
+                          ),
                         ],
                       ),
                     ],
@@ -391,10 +1009,21 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                     runSpacing: 12,
                     children: [
                       _metricChip('BP', '${item.bpSys}/${item.bpDys}'),
-                      _metricChip('Sugar', '${item.bloodSugar} mg/dL'),
+                      _metricChip(
+                        'Sugar',
+                        '${_formatNumber(item.bloodSugar)} mg/dL${item.sugarType.isEmpty ? '' : ' (${item.sugarType})'}',
+                      ),
                       _metricChip('Pulse', '${item.pulse} bpm'),
-                      _metricChip('Weight', '${item.weightKg} kg'),
-                      _metricChip('Height', '${item.heightCms} cm'),
+                      _metricChip(
+                        'Weight',
+                        '${_formatNumber(item.weightKg)} kg',
+                      ),
+                      _metricChip(
+                        'Height',
+                        '${_formatNumber(item.heightCms)} cm',
+                      ),
+                      if (item.bmi > 0)
+                        _metricChip('BMI', _formatNumber(item.bmi)),
                     ],
                   ),
                 ],
@@ -417,12 +1046,19 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black54)),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.black54,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(value,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
         ],
       ),
     );
@@ -436,8 +1072,11 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(_error!, style: const TextStyle(color: Colors.red),
-              textAlign: TextAlign.center),
+          child: Text(
+            _error!,
+            style: const TextStyle(color: Colors.red),
+            textAlign: TextAlign.center,
+          ),
         ),
       );
     }
@@ -465,8 +1104,9 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
       dysSpots.add(FlSpot(i.toDouble(), sorted[i].bpDys.toDouble()));
     }
 
-    final allBp = sorted
-        .expand((v) => [v.bpSys.toDouble(), v.bpDys.toDouble()]);
+    final allBp = sorted.expand(
+      (v) => [v.bpSys.toDouble(), v.bpDys.toDouble()],
+    );
     final minBp = allBp.reduce(math.min);
     final maxBp = allBp.reduce(math.max);
     final minY = (minBp - 15).clamp(30.0, 110.0);
@@ -476,8 +1116,8 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
     final xInterval = n <= 6
         ? 1.0
         : n <= 12
-            ? 2.0
-            : (n / 6).ceilToDouble();
+        ? 2.0
+        : (n / 6).ceilToDouble();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -491,10 +1131,9 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
           // ── Chart ────────────────────────────────────────────────────────────
           Text(
             'Blood Pressure Trend',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
@@ -516,14 +1155,10 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                   drawVerticalLine: true,
                   horizontalInterval: 20,
                   verticalInterval: xInterval,
-                  getDrawingHorizontalLine: (v) => FlLine(
-                    color: Colors.grey.shade200,
-                    strokeWidth: 1,
-                  ),
-                  getDrawingVerticalLine: (v) => FlLine(
-                    color: Colors.grey.shade100,
-                    strokeWidth: 0.5,
-                  ),
+                  getDrawingHorizontalLine: (v) =>
+                      FlLine(color: Colors.grey.shade200, strokeWidth: 1),
+                  getDrawingVerticalLine: (v) =>
+                      FlLine(color: Colors.grey.shade100, strokeWidth: 0.5),
                 ),
                 titlesData: FlTitlesData(
                   topTitles: const AxisTitles(
@@ -535,8 +1170,10 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                   leftTitles: AxisTitles(
                     axisNameWidget: const Padding(
                       padding: EdgeInsets.only(bottom: 4),
-                      child: Text('mmHg',
-                          style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      child: Text(
+                        'mmHg',
+                        style: TextStyle(fontSize: 10, color: Colors.grey),
+                      ),
                     ),
                     axisNameSize: 18,
                     sideTitles: SideTitles(
@@ -546,7 +1183,9 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                       getTitlesWidget: (v, _) => Text(
                         v.toInt().toString(),
                         style: const TextStyle(
-                            fontSize: 11, color: Colors.black54),
+                          fontSize: 11,
+                          color: Colors.black54,
+                        ),
                       ),
                     ),
                   ),
@@ -571,7 +1210,9 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                           child: Text(
                             _fmtDate(sorted[idx].insertedOn),
                             style: const TextStyle(
-                                fontSize: 9, color: Colors.black54),
+                              fontSize: 9,
+                              color: Colors.black54,
+                            ),
                             textAlign: TextAlign.center,
                           ),
                         );
@@ -597,9 +1238,10 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                           alignment: Alignment.topRight,
                           labelResolver: (_) => '120',
                           style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.red.shade400,
-                              fontWeight: FontWeight.w600),
+                            fontSize: 10,
+                            color: Colors.red.shade400,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     if (140 >= minY && 140 <= maxY)
@@ -613,9 +1255,10 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                           alignment: Alignment.topRight,
                           labelResolver: (_) => '140',
                           style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.red.shade600,
-                              fontWeight: FontWeight.w600),
+                            fontSize: 10,
+                            color: Colors.red.shade600,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     if (80 >= minY && 80 <= maxY)
@@ -629,9 +1272,10 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                           alignment: Alignment.topRight,
                           labelResolver: (_) => '80',
                           style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.blue.shade400,
-                              fontWeight: FontWeight.w600),
+                            fontSize: 10,
+                            color: Colors.blue.shade400,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     if (90 >= minY && 90 <= maxY)
@@ -645,9 +1289,10 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                           alignment: Alignment.topRight,
                           labelResolver: (_) => '90',
                           style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.blue.shade600,
-                              fontWeight: FontWeight.w600),
+                            fontSize: 10,
+                            color: Colors.blue.shade600,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                   ],
@@ -664,11 +1309,11 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                       show: true,
                       getDotPainter: (spot, pct, bar, idx) =>
                           FlDotCirclePainter(
-                        radius: sorted.length <= 20 ? 4.5 : 3,
-                        color: Colors.red.shade600,
-                        strokeColor: Colors.white,
-                        strokeWidth: 1.5,
-                      ),
+                            radius: sorted.length <= 20 ? 4.5 : 3,
+                            color: Colors.red.shade600,
+                            strokeColor: Colors.white,
+                            strokeWidth: 1.5,
+                          ),
                     ),
                     belowBarData: BarAreaData(
                       show: true,
@@ -686,11 +1331,11 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                       show: true,
                       getDotPainter: (spot, pct, bar, idx) =>
                           FlDotCirclePainter(
-                        radius: sorted.length <= 20 ? 4.5 : 3,
-                        color: Colors.blue.shade600,
-                        strokeColor: Colors.white,
-                        strokeWidth: 1.5,
-                      ),
+                            radius: sorted.length <= 20 ? 4.5 : 3,
+                            color: Colors.blue.shade600,
+                            strokeColor: Colors.white,
+                            strokeWidth: 1.5,
+                          ),
                     ),
                     belowBarData: BarAreaData(
                       show: true,
@@ -705,8 +1350,10 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                       setState(() => _touchedIndex = null);
                     } else if (response?.lineBarSpots != null &&
                         response!.lineBarSpots!.isNotEmpty) {
-                      setState(() =>
-                          _touchedIndex = response.lineBarSpots!.first.x.toInt());
+                      setState(
+                        () => _touchedIndex = response.lineBarSpots!.first.x
+                            .toInt(),
+                      );
                     }
                   },
                   touchTooltipData: LineTouchTooltipData(
@@ -725,9 +1372,10 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                         return LineTooltipItem(
                           i == 0 ? '$date\n' : '',
                           const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 11,
-                              fontWeight: FontWeight.normal),
+                            color: Colors.white70,
+                            fontSize: 11,
+                            fontWeight: FontWeight.normal,
+                          ),
                           children: [
                             TextSpan(
                               text:
@@ -755,10 +1403,9 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
           // ── Data table ───────────────────────────────────────────────────────
           Text(
             'Readings',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           _buildBpDataTable(sorted),
@@ -781,39 +1428,66 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
               children: [
                 _legendDot(Colors.red.shade600),
                 const SizedBox(width: 6),
-                const Text('Systolic (upper)',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Systolic (upper)',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(width: 20),
                 _legendDot(Colors.blue.shade600),
                 const SizedBox(width: 6),
-                const Text('Diastolic (lower)',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Diastolic (lower)',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
               ],
             ),
             const SizedBox(height: 10),
             // Reference ranges
             const Divider(height: 1),
             const SizedBox(height: 10),
-            Text('Normal ranges',
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade600)),
+            Text(
+              'Normal ranges',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade600,
+              ),
+            ),
             const SizedBox(height: 6),
             Wrap(
               spacing: 12,
               runSpacing: 6,
               children: [
-                _rangeChip('Systolic Normal', '< 120', Colors.red.shade100,
-                    Colors.red.shade700),
-                _rangeChip('Systolic Elevated', '120–129', Colors.orange.shade100,
-                    Colors.orange.shade800),
-                _rangeChip('Systolic High', '≥ 130', Colors.red.shade200,
-                    Colors.red.shade900),
-                _rangeChip('Diastolic Normal', '< 80', Colors.blue.shade100,
-                    Colors.blue.shade700),
-                _rangeChip('Diastolic High', '≥ 80', Colors.blue.shade200,
-                    Colors.blue.shade900),
+                _rangeChip(
+                  'Systolic Normal',
+                  '< 120',
+                  Colors.red.shade100,
+                  Colors.red.shade700,
+                ),
+                _rangeChip(
+                  'Systolic Elevated',
+                  '120–129',
+                  Colors.orange.shade100,
+                  Colors.orange.shade800,
+                ),
+                _rangeChip(
+                  'Systolic High',
+                  '≥ 130',
+                  Colors.red.shade200,
+                  Colors.red.shade900,
+                ),
+                _rangeChip(
+                  'Diastolic Normal',
+                  '< 80',
+                  Colors.blue.shade100,
+                  Colors.blue.shade700,
+                ),
+                _rangeChip(
+                  'Diastolic High',
+                  '≥ 80',
+                  Colors.blue.shade200,
+                  Colors.blue.shade900,
+                ),
               ],
             ),
           ],
@@ -823,16 +1497,18 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
   }
 
   Widget _legendDot(Color color) => Container(
-        width: 12,
-        height: 12,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      );
+    width: 12,
+    height: 12,
+    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+  );
 
   Widget _rangeChip(String label, String range, Color bg, Color fg) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration:
-          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
       child: Text(
         '$label: $range mmHg',
         style: TextStyle(fontSize: 11, color: fg, fontWeight: FontWeight.w500),
@@ -879,7 +1555,8 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
               final statusColor = (sysOk && dysOk)
                   ? Colors.green.shade700
                   : Colors.orange.shade800;
-              final isHighlighted = _touchedIndex != null &&
+              final isHighlighted =
+                  _touchedIndex != null &&
                   sorted[_touchedIndex!].patientVitalsId == v.patientVitalsId;
               return TableRow(
                 decoration: BoxDecoration(
@@ -889,11 +1566,15 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
                 ),
                 children: [
                   _tableCell(_fmtDate(v.insertedOn)),
-                  _tableCell('${v.bpSys}',
-                      color: sysOk ? null : Colors.red.shade700),
-                  _tableCell('${v.bpDys}',
-                      color: dysOk ? null : Colors.blue.shade700),
-                  _tableCell('${v.bloodSugar}'),
+                  _tableCell(
+                    '${v.bpSys}',
+                    color: sysOk ? null : Colors.red.shade700,
+                  ),
+                  _tableCell(
+                    '${v.bpDys}',
+                    color: dysOk ? null : Colors.blue.shade700,
+                  ),
+                  _tableCell(_formatNumber(v.bloodSugar)),
                   _tableCell(status, color: statusColor),
                 ],
               );
@@ -944,9 +1625,9 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
       await Printing.layoutPdf(onLayout: (_) => doc.save());
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _exportingPdf = false);
@@ -989,9 +1670,10 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
       child: pw.Text(
         'BP Report — ${widget.patientName}',
         style: pw.TextStyle(
-            fontSize: 10,
-            color: PdfColors.blueGrey600,
-            fontWeight: pw.FontWeight.bold),
+          fontSize: 10,
+          color: PdfColors.blueGrey600,
+          fontWeight: pw.FontWeight.bold,
+        ),
       ),
     );
   }
@@ -1001,8 +1683,9 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
       return [pw.Text('No vitals recorded.')];
     }
 
-    final allBp =
-        sorted.expand((v) => [v.bpSys.toDouble(), v.bpDys.toDouble()]);
+    final allBp = sorted.expand(
+      (v) => [v.bpSys.toDouble(), v.bpDys.toDouble()],
+    );
     final minBp = allBp.reduce(math.min);
     final maxBp = allBp.reduce(math.max);
     final minV = (minBp - 10).clamp(30.0, 110.0);
@@ -1022,58 +1705,84 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
         child: pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text('Normal Ranges',
-                style: pw.TextStyle(
-                    fontSize: 10,
-                    fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.blueGrey700)),
+            pw.Text(
+              'Normal Ranges',
+              style: pw.TextStyle(
+                fontSize: 10,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.blueGrey700,
+              ),
+            ),
             pw.SizedBox(height: 6),
-            pw.Row(children: [
-              pw.Container(
-                  width: 10, height: 10, color: PdfColors.red600),
-              pw.SizedBox(width: 5),
-              pw.Text('Systolic: Normal <120 | Elevated 120–129 | High ≥130',
+            pw.Row(
+              children: [
+                pw.Container(width: 10, height: 10, color: PdfColors.red600),
+                pw.SizedBox(width: 5),
+                pw.Text(
+                  'Systolic: Normal <120 | Elevated 120–129 | High ≥130',
                   style: pw.TextStyle(
-                      fontSize: 9, color: PdfColors.blueGrey700)),
-            ]),
+                    fontSize: 9,
+                    color: PdfColors.blueGrey700,
+                  ),
+                ),
+              ],
+            ),
             pw.SizedBox(height: 3),
-            pw.Row(children: [
-              pw.Container(
-                  width: 10, height: 10, color: PdfColors.blue600),
-              pw.SizedBox(width: 5),
-              pw.Text('Diastolic: Normal <80 | High ≥80',
+            pw.Row(
+              children: [
+                pw.Container(width: 10, height: 10, color: PdfColors.blue600),
+                pw.SizedBox(width: 5),
+                pw.Text(
+                  'Diastolic: Normal <80 | High ≥80',
                   style: pw.TextStyle(
-                      fontSize: 9, color: PdfColors.blueGrey700)),
-            ]),
+                    fontSize: 9,
+                    color: PdfColors.blueGrey700,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
       pw.SizedBox(height: 16),
 
       // ── Systolic chart ───────────────────────────────────────────────────
-      pw.Text('Systolic Blood Pressure',
-          style: pw.TextStyle(
-              fontSize: 12, fontWeight: pw.FontWeight.bold)),
+      pw.Text(
+        'Systolic Blood Pressure',
+        style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+      ),
       pw.SizedBox(height: 6),
       _pdfBarChartRow(
-          sorted, (v) => v.bpSys.toDouble(), minV, range, PdfColors.red600,
-          thresholds: [120, 140]),
+        sorted,
+        (v) => v.bpSys.toDouble(),
+        minV,
+        range,
+        PdfColors.red600,
+        thresholds: [120, 140],
+      ),
       pw.SizedBox(height: 18),
 
       // ── Diastolic chart ──────────────────────────────────────────────────
-      pw.Text('Diastolic Blood Pressure',
-          style: pw.TextStyle(
-              fontSize: 12, fontWeight: pw.FontWeight.bold)),
+      pw.Text(
+        'Diastolic Blood Pressure',
+        style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+      ),
       pw.SizedBox(height: 6),
       _pdfBarChartRow(
-          sorted, (v) => v.bpDys.toDouble(), minV, range, PdfColors.blue600,
-          thresholds: [80, 90]),
+        sorted,
+        (v) => v.bpDys.toDouble(),
+        minV,
+        range,
+        PdfColors.blue600,
+        thresholds: [80, 90],
+      ),
       pw.SizedBox(height: 20),
 
       // ── Data table ───────────────────────────────────────────────────────
-      pw.Text('Readings',
-          style: pw.TextStyle(
-              fontSize: 12, fontWeight: pw.FontWeight.bold)),
+      pw.Text(
+        'Readings',
+        style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+      ),
       pw.SizedBox(height: 8),
       _pdfDataTable(sorted),
     ];
@@ -1103,8 +1812,9 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
               final norm = ((val - minV) / range).clamp(0.0, 1.0);
               final barH = math.max(norm * chartH, 2.0);
               final ok = thresholds.first > 100
-                  ? val < thresholds[0]   // systolic: ok if < 130
-                  : val < thresholds[0];  // diastolic: ok if < 80
+                  ? val <
+                        thresholds[0] // systolic: ok if < 130
+                  : val < thresholds[0]; // diastolic: ok if < 80
               return pw.Expanded(
                 child: pw.Padding(
                   padding: const pw.EdgeInsets.symmetric(horizontal: 2),
@@ -1137,8 +1847,7 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
             return pw.Expanded(
               child: pw.Text(
                 _fmtDate(v.insertedOn),
-                style: pw.TextStyle(
-                    fontSize: 6, color: PdfColors.blueGrey600),
+                style: pw.TextStyle(fontSize: 6, color: PdfColors.blueGrey600),
                 textAlign: pw.TextAlign.center,
               ),
             );
@@ -1146,24 +1855,23 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
         ),
         // Threshold legend
         pw.SizedBox(height: 4),
-        pw.Row(children: [
-          pw.Container(
-              width: 10, height: 1.5, color: PdfColors.orange700),
-          pw.SizedBox(width: 4),
-          pw.Text(
-            'Review threshold: ${thresholds[0].toInt()} mmHg',
-            style: pw.TextStyle(
-                fontSize: 7, color: PdfColors.blueGrey600),
-          ),
-        ]),
+        pw.Row(
+          children: [
+            pw.Container(width: 10, height: 1.5, color: PdfColors.orange700),
+            pw.SizedBox(width: 4),
+            pw.Text(
+              'Review threshold: ${thresholds[0].toInt()} mmHg',
+              style: pw.TextStyle(fontSize: 7, color: PdfColors.blueGrey600),
+            ),
+          ],
+        ),
       ],
     );
   }
 
   pw.Widget _pdfDataTable(List<PatientVitalsModel> sorted) {
     return pw.Table(
-      border: pw.TableBorder.all(
-          color: PdfColors.blueGrey200, width: 0.5),
+      border: pw.TableBorder.all(color: PdfColors.blueGrey200, width: 0.5),
       columnWidths: const {
         0: pw.FlexColumnWidth(2.5),
         1: pw.FlexColumnWidth(1.2),
@@ -1173,8 +1881,7 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
       },
       children: [
         pw.TableRow(
-          decoration:
-              const pw.BoxDecoration(color: PdfColors.blueGrey50),
+          decoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
           children: [
             _pdfCell('Date', header: true),
             _pdfCell('Systolic', header: true),
@@ -1185,34 +1892,38 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
         ),
         ...sorted.reversed.map((v) {
           final ok = v.bpSys < 130 && v.bpDys < 80;
-          return pw.TableRow(children: [
-            _pdfCell(_fmtDate(v.insertedOn)),
-            _pdfCell('${v.bpSys} mmHg',
-                color: v.bpSys >= 130 ? PdfColors.red700 : null),
-            _pdfCell('${v.bpDys} mmHg',
-                color: v.bpDys >= 80 ? PdfColors.blue700 : null),
-            _pdfCell('${v.bloodSugar} mg/dL'),
-            _pdfCell(ok ? 'Normal' : 'Review',
-                color: ok ? PdfColors.green700 : PdfColors.orange700),
-          ]);
+          return pw.TableRow(
+            children: [
+              _pdfCell(_fmtDate(v.insertedOn)),
+              _pdfCell(
+                '${v.bpSys} mmHg',
+                color: v.bpSys >= 130 ? PdfColors.red700 : null,
+              ),
+              _pdfCell(
+                '${v.bpDys} mmHg',
+                color: v.bpDys >= 80 ? PdfColors.blue700 : null,
+              ),
+              _pdfCell('${_formatNumber(v.bloodSugar)} mg/dL'),
+              _pdfCell(
+                ok ? 'Normal' : 'Review',
+                color: ok ? PdfColors.green700 : PdfColors.orange700,
+              ),
+            ],
+          );
         }),
       ],
     );
   }
 
-  pw.Widget _pdfCell(String text,
-      {bool header = false, PdfColor? color}) {
+  pw.Widget _pdfCell(String text, {bool header = false, PdfColor? color}) {
     return pw.Padding(
-      padding:
-          const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+      padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
       child: pw.Text(
         text,
         style: pw.TextStyle(
           fontSize: header ? 9 : 8,
-          fontWeight:
-              header ? pw.FontWeight.bold : pw.FontWeight.normal,
-          color: color ??
-              (header ? PdfColors.blueGrey800 : PdfColors.black),
+          fontWeight: header ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: color ?? (header ? PdfColors.blueGrey800 : PdfColors.black),
         ),
       ),
     );
@@ -1256,16 +1967,13 @@ class _PatientVitalsPageState extends State<PatientVitalsPage>
       floatingActionButton: onChartsTab
           ? null
           : FloatingActionButton.extended(
-              onPressed: _saving ? null : () => _showVitalsDialog(),
+              onPressed: _saving ? null : () => _showAddVitalsMenu(),
               icon: const Icon(Icons.add),
               label: const Text('Add Vitals'),
             ),
       body: TabBarView(
         controller: _tabController,
-        children: [
-          _buildRecordsList(),
-          _buildBpCharts(),
-        ],
+        children: [_buildRecordsList(), _buildBpCharts()],
       ),
     );
   }

@@ -168,6 +168,13 @@ class _StaffAnalyticsPageState extends State<StaffAnalyticsPage> {
                   ),
                   const SizedBox(height: 16),
                   _ChartCard(
+                    title: 'Patients by BMI',
+                    child: _ThreeDVerticalBarChart(
+                      data: analytics.patientsByBmiRange,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _ChartCard(
                     title: 'Patients by City',
                     child: _HorizontalCountChart(
                       data: analytics.patientsByCity,
@@ -284,6 +291,7 @@ class _StaffAnalyticsPageState extends State<StaffAnalyticsPage> {
             'Patients by Blood Sugar',
             analytics.patientsByBloodSugarRange,
           ),
+          _pdfSection('Patients by BMI', analytics.patientsByBmiRange),
           _pdfSection('Patients by City', analytics.patientsByCity),
         ],
       ),

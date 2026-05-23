@@ -32,6 +32,7 @@ class PatientAnalyticsPage extends StatefulWidget {
   final String patientMobile;
   final String patientCity;
   final String patientBirthDate;
+
   /// When [readOnly] is true the page loads data via the patient self-access
   /// endpoint (`/me/analytics`) instead of the staff endpoint.
   final bool readOnly;
@@ -94,10 +95,12 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
         patientDataId: widget.patientDataId,
       );
 
-      final byParameter = <String, Map<String, List<PatientRecordDetailModel>>>{};
+      final byParameter =
+          <String, Map<String, List<PatientRecordDetailModel>>>{};
       for (final d in details) {
-        final paramName =
-            d.recordParameterName.isNotEmpty ? d.recordParameterName : 'Other';
+        final paramName = d.recordParameterName.isNotEmpty
+            ? d.recordParameterName
+            : 'Other';
         byParameter
             .putIfAbsent(paramName, () => {})
             .putIfAbsent(d.keyword, () => [])
@@ -136,9 +139,9 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
       await Printing.layoutPdf(onLayout: (_) async => bytes);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('PDF export failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('PDF export failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _exportingPdf = false);
@@ -247,13 +250,18 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(label,
-            style: pw.TextStyle(fontSize: 8, color: PdfColors.blue200)),
-        pw.Text(value,
-            style: pw.TextStyle(
-                fontSize: 10,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.white)),
+        pw.Text(
+          label,
+          style: pw.TextStyle(fontSize: 8, color: PdfColors.blue200),
+        ),
+        pw.Text(
+          value,
+          style: pw.TextStyle(
+            fontSize: 10,
+            fontWeight: pw.FontWeight.bold,
+            color: PdfColors.white,
+          ),
+        ),
       ],
     );
   }
@@ -269,8 +277,7 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
       widgets.add(
         pw.Container(
           width: double.infinity,
-          padding:
-              const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: pw.BoxDecoration(
             color: PdfColors.blueGrey100,
             borderRadius: pw.BorderRadius.circular(4),
@@ -297,13 +304,15 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
         points.sort((a, b) => a.date.compareTo(b.date));
         if (points.isEmpty) continue;
 
-        widgets.add(_pdfKeywordSection(
-          keyword,
-          rows.first.description,
-          points,
-          rows.first.idealLower,
-          rows.first.idealUpper,
-        ));
+        widgets.add(
+          _pdfKeywordSection(
+            keyword,
+            rows.first.description,
+            points,
+            rows.first.idealLower,
+            rows.first.idealUpper,
+          ),
+        );
         widgets.add(pw.SizedBox(height: 14));
       }
       widgets.add(pw.SizedBox(height: 6));
@@ -339,31 +348,48 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
           spacing: 10,
           runSpacing: 6,
           children: [
-            _pdfSummaryChip('Latest BP', '${latest.bpSys}/${latest.bpDys} mmHg'),
-            _pdfSummaryChip('Latest Sugar', '${latest.bloodSugar} mg/dL'),
+            _pdfSummaryChip(
+              'Latest BP',
+              '${latest.bpSys}/${latest.bpDys} mmHg',
+            ),
+            _pdfSummaryChip(
+              'Latest Sugar',
+              '${_fmtNumber(latest.bloodSugar)} mg/dL',
+            ),
             _pdfSummaryChip('Latest Pulse', '${latest.pulse} bpm'),
-            _pdfSummaryChip('Latest Weight', '${latest.weightKg} kg'),
-            _pdfSummaryChip('Latest Height', '${latest.heightCms} cm'),
+            _pdfSummaryChip(
+              'Latest Weight',
+              '${_fmtNumber(latest.weightKg)} kg',
+            ),
+            _pdfSummaryChip(
+              'Latest Height',
+              '${_fmtNumber(latest.heightCms)} cm',
+            ),
           ],
         ),
       if (latest != null) pw.SizedBox(height: 10),
       _pdfBucketSection(
         title: 'BP Systolic Buckets',
         unit: 'mmHg',
-        counts: _buildBucketCounts(sorted.map((v) => v.bpSys.toDouble()).toList()),
+        counts: _buildBucketCounts(
+          sorted.map((v) => v.bpSys.toDouble()).toList(),
+        ),
       ),
       pw.SizedBox(height: 12),
       _pdfBucketSection(
         title: 'BP Diastolic Buckets',
         unit: 'mmHg',
-        counts: _buildBucketCounts(sorted.map((v) => v.bpDys.toDouble()).toList()),
+        counts: _buildBucketCounts(
+          sorted.map((v) => v.bpDys.toDouble()).toList(),
+        ),
       ),
       pw.SizedBox(height: 12),
       _pdfBucketSection(
         title: 'Blood Sugar Buckets',
         unit: 'mg/dL',
-        counts:
-            _buildBucketCounts(sorted.map((v) => v.bloodSugar.toDouble()).toList()),
+        counts: _buildBucketCounts(
+          sorted.map((v) => v.bloodSugar.toDouble()).toList(),
+        ),
       ),
       pw.SizedBox(height: 16),
     ];
@@ -405,7 +431,9 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
           child: pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: counts.map((bucket) {
-              final height = bucket.count <= 0 ? 2.0 : (bucket.count / maxCount) * 52;
+              final height = bucket.count <= 0
+                  ? 2.0
+                  : (bucket.count / maxCount) * 52;
               return pw.Expanded(
                 child: pw.Padding(
                   padding: const pw.EdgeInsets.symmetric(horizontal: 2),
@@ -414,7 +442,10 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
                     children: [
                       pw.Text(
                         '${bucket.count}',
-                        style: pw.TextStyle(fontSize: 7, color: PdfColors.blueGrey700),
+                        style: pw.TextStyle(
+                          fontSize: 7,
+                          color: PdfColors.blueGrey700,
+                        ),
                       ),
                       pw.SizedBox(height: 2),
                       pw.Container(
@@ -501,19 +532,25 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
             pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text(keyword,
-                    style: pw.TextStyle(
-                        fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                pw.Text(
+                  keyword,
+                  style: pw.TextStyle(
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
                 if (description.isNotEmpty)
-                  pw.Text(description,
-                      style: pw.TextStyle(
-                          fontSize: 9, color: PdfColors.grey600)),
+                  pw.Text(
+                    description,
+                    style: pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+                  ),
               ],
             ),
             if (idealText.isNotEmpty)
-              pw.Text(idealText,
-                  style: pw.TextStyle(
-                      fontSize: 9, color: PdfColors.green800)),
+              pw.Text(
+                idealText,
+                style: pw.TextStyle(fontSize: 9, color: PdfColors.green800),
+              ),
           ],
         ),
         pw.SizedBox(height: 8),
@@ -532,8 +569,7 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
           },
           children: [
             pw.TableRow(
-              decoration:
-                  const pw.BoxDecoration(color: PdfColors.blueGrey50),
+              decoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
               children: [
                 _pdfCell('Date', header: true),
                 _pdfCell('Value', header: true),
@@ -542,16 +578,19 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
             ),
             ...points.map((p) {
               final val = p.row.readingValue;
-              final ok = (idealLower == null || val >= idealLower) &&
+              final ok =
+                  (idealLower == null || val >= idealLower) &&
                   (idealUpper == null || val <= idealUpper);
-              return pw.TableRow(children: [
-                _pdfCell(_fmtDate(p.date)),
-                _pdfCell(val.toStringAsFixed(2)),
-                _pdfCell(
-                  ok ? 'Normal' : 'Review',
-                  color: ok ? PdfColors.green700 : PdfColors.orange700,
-                ),
-              ]);
+              return pw.TableRow(
+                children: [
+                  _pdfCell(_fmtDate(p.date)),
+                  _pdfCell(val.toStringAsFixed(2)),
+                  _pdfCell(
+                    ok ? 'Normal' : 'Review',
+                    color: ok ? PdfColors.green700 : PdfColors.orange700,
+                  ),
+                ],
+              );
             }),
           ],
         ),
@@ -592,24 +631,21 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: points.map((p) {
               final val = p.row.readingValue;
-              final normalized =
-                  ((val - effMin) / effRange).clamp(0.0, 1.0);
+              final normalized = ((val - effMin) / effRange).clamp(0.0, 1.0);
               final barH = math.max(normalized * chartH, 2.0);
-              final ok = (idealLower == null || val >= idealLower) &&
+              final ok =
+                  (idealLower == null || val >= idealLower) &&
                   (idealUpper == null || val <= idealUpper);
               return pw.Expanded(
                 child: pw.Padding(
-                  padding:
-                      const pw.EdgeInsets.symmetric(horizontal: 2),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 2),
                   child: pw.Column(
                     mainAxisAlignment: pw.MainAxisAlignment.end,
                     children: [
                       pw.Container(
                         height: barH,
                         decoration: pw.BoxDecoration(
-                          color: ok
-                              ? PdfColors.blue600
-                              : PdfColors.orange,
+                          color: ok ? PdfColors.blue600 : PdfColors.orange,
                           borderRadius: pw.BorderRadius.only(
                             topLeft: const pw.Radius.circular(2),
                             topRight: const pw.Radius.circular(2),
@@ -632,8 +668,7 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
             return pw.Expanded(
               child: pw.Text(
                 _fmtDate(p.date),
-                style: pw.TextStyle(
-                    fontSize: 6, color: PdfColors.blueGrey600),
+                style: pw.TextStyle(fontSize: 6, color: PdfColors.blueGrey600),
                 textAlign: pw.TextAlign.center,
               ),
             );
@@ -645,15 +680,11 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
             padding: const pw.EdgeInsets.only(top: 3),
             child: pw.Row(
               children: [
-                pw.Container(
-                    width: 10,
-                    height: 1.5,
-                    color: PdfColors.green700),
+                pw.Container(width: 10, height: 1.5, color: PdfColors.green700),
                 pw.SizedBox(width: 4),
                 pw.Text(
                   'Ideal: ${idealLower?.toStringAsFixed(1) ?? '–'} – ${idealUpper?.toStringAsFixed(1) ?? '–'}',
-                  style: pw.TextStyle(
-                      fontSize: 7, color: PdfColors.green800),
+                  style: pw.TextStyle(fontSize: 7, color: PdfColors.green800),
                 ),
               ],
             ),
@@ -662,17 +693,14 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
     );
   }
 
-  pw.Widget _pdfCell(String text,
-      {bool header = false, PdfColor? color}) {
+  pw.Widget _pdfCell(String text, {bool header = false, PdfColor? color}) {
     return pw.Padding(
-      padding:
-          const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+      padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
       child: pw.Text(
         text,
         style: pw.TextStyle(
           fontSize: header ? 9 : 8,
-          fontWeight:
-              header ? pw.FontWeight.bold : pw.FontWeight.normal,
+          fontWeight: header ? pw.FontWeight.bold : pw.FontWeight.normal,
           color: color ?? (header ? PdfColors.blueGrey800 : PdfColors.black),
         ),
       ),
@@ -684,8 +712,7 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
   @override
   Widget build(BuildContext context) {
     final tabController = _tabController;
-    final showTabs =
-        !_loading && _error == null && tabController != null;
+    final showTabs = !_loading && _error == null && tabController != null;
     final tabLabels = _buildTabLabels();
 
     return Scaffold(
@@ -720,9 +747,7 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
                 controller: tabController,
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
-                tabs: tabLabels
-                    .map((n) => Tab(text: n))
-                    .toList(),
+                tabs: tabLabels.map((n) => Tab(text: n)).toList(),
               )
             : null,
       ),
@@ -744,9 +769,11 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
             children: [
               const Icon(Icons.error_outline, size: 48, color: Colors.red),
               const SizedBox(height: 12),
-              Text(_error!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.red)),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.red),
+              ),
               const SizedBox(height: 16),
               FilledButton(onPressed: _load, child: const Text('Retry')),
             ],
@@ -755,8 +782,7 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
       );
     }
 
-    if (tabController == null ||
-        (_parameterNames.isEmpty && _vitals.isEmpty)) {
+    if (tabController == null || (_parameterNames.isEmpty && _vitals.isEmpty)) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24),
@@ -789,10 +815,7 @@ class _PatientAnalyticsPageState extends State<PatientAnalyticsPage>
   }
 
   List<String> _buildTabLabels() {
-    return [
-      if (_vitals.isNotEmpty) 'Vitals',
-      ..._parameterNames,
-    ];
+    return [if (_vitals.isNotEmpty) 'Vitals', ..._parameterNames];
   }
 }
 
@@ -831,23 +854,24 @@ class _VitalsAnalyticsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sorted = [...vitals]..sort((a, b) => a.insertedOn.compareTo(b.insertedOn));
+    final sorted = [...vitals]
+      ..sort((a, b) => a.insertedOn.compareTo(b.insertedOn));
     final latest = sorted.isEmpty ? null : sorted.last;
-    final systolicCounts =
-        _buildBucketCounts(sorted.map((v) => v.bpSys.toDouble()).toList());
-    final diastolicCounts =
-        _buildBucketCounts(sorted.map((v) => v.bpDys.toDouble()).toList());
-    final bloodSugarCounts =
-        _buildBucketCounts(sorted.map((v) => v.bloodSugar.toDouble()).toList());
+    final systolicCounts = _buildBucketCounts(
+      sorted.map((v) => v.bpSys.toDouble()).toList(),
+    );
+    final diastolicCounts = _buildBucketCounts(
+      sorted.map((v) => v.bpDys.toDouble()).toList(),
+    );
+    final bloodSugarCounts = _buildBucketCounts(
+      sorted.map((v) => v.bloodSugar.toDouble()).toList(),
+    );
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         if (latest != null)
-          _VitalsSummaryCard(
-            latest: latest,
-            totalReadings: sorted.length,
-          ),
+          _VitalsSummaryCard(latest: latest, totalReadings: sorted.length),
         if (latest != null) const SizedBox(height: 16),
         _BucketBarChartCard(
           title: 'BP Systolic Distribution',
@@ -875,10 +899,7 @@ class _VitalsAnalyticsTab extends StatelessWidget {
 }
 
 class _VitalsSummaryCard extends StatelessWidget {
-  const _VitalsSummaryCard({
-    required this.latest,
-    required this.totalReadings,
-  });
+  const _VitalsSummaryCard({required this.latest, required this.totalReadings});
 
   final PatientVitalsModel latest;
   final int totalReadings;
@@ -893,10 +914,9 @@ class _VitalsSummaryCard extends StatelessWidget {
           children: [
             Text(
               'Vitals Snapshot',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Text(
@@ -908,15 +928,29 @@ class _VitalsSummaryCard extends StatelessWidget {
               spacing: 10,
               runSpacing: 10,
               children: [
-                _summaryChip(context, 'BP', '${latest.bpSys}/${latest.bpDys} mmHg'),
+                _summaryChip(
+                  context,
+                  'BP',
+                  '${latest.bpSys}/${latest.bpDys} mmHg',
+                ),
                 _summaryChip(
                   context,
                   'Blood Sugar',
-                  '${latest.bloodSugar} mg/dL',
+                  '${_fmtNumber(latest.bloodSugar)} mg/dL',
                 ),
                 _summaryChip(context, 'Pulse', '${latest.pulse} bpm'),
-                _summaryChip(context, 'Weight', '${latest.weightKg} kg'),
-                _summaryChip(context, 'Height', '${latest.heightCms} cm'),
+                _summaryChip(
+                  context,
+                  'Weight',
+                  '${_fmtNumber(latest.weightKg)} kg',
+                ),
+                _summaryChip(
+                  context,
+                  'Height',
+                  '${_fmtNumber(latest.heightCms)} cm',
+                ),
+                if (latest.bmi > 0)
+                  _summaryChip(context, 'BMI', _fmtNumber(latest.bmi)),
               ],
             ),
           ],
@@ -940,10 +974,9 @@ class _VitalsSummaryCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             value,
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -978,10 +1011,9 @@ class _BucketBarChartCard extends StatelessWidget {
           children: [
             Text(
               title,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
@@ -1001,7 +1033,9 @@ class _BucketBarChartCard extends StatelessWidget {
                         return BarTooltipItem(
                           '${bucket.label}\n${bucket.count} reading${bucket.count == 1 ? '' : 's'}',
                           TextStyle(
-                            color: Theme.of(context).colorScheme.onInverseSurface,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onInverseSurface,
                             fontWeight: FontWeight.w600,
                           ),
                         );
@@ -1013,10 +1047,9 @@ class _BucketBarChartCard extends StatelessWidget {
                     drawVerticalLine: false,
                     horizontalInterval: 1,
                     getDrawingHorizontalLine: (value) => FlLine(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .outlineVariant
-                          .withValues(alpha: 0.45),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.outlineVariant.withValues(alpha: 0.45),
                       strokeWidth: 1,
                     ),
                   ),
@@ -1073,10 +1106,9 @@ class _BucketBarChartCard extends StatelessWidget {
                               child: Text(
                                 bucketCounts[index].label,
                                 textAlign: TextAlign.center,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelSmall
-                                    ?.copyWith(fontSize: 10),
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.labelSmall?.copyWith(fontSize: 10),
                               ),
                             ),
                           );
@@ -1159,7 +1191,8 @@ class _ThreeDBarChartCard extends StatelessWidget {
     final description = rows.first.description;
 
     final latest = points.last.row.readingValue;
-    final latestOk = (idealLower == null || latest >= idealLower) &&
+    final latestOk =
+        (idealLower == null || latest >= idealLower) &&
         (idealUpper == null || latest <= idealUpper);
 
     return Card(
@@ -1170,51 +1203,50 @@ class _ThreeDBarChartCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Header ──────────────────────────────────────────────
-            Row(children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      keyword,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    if (description.isNotEmpty)
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        description,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
+                        keyword,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Chip(
-                avatar: Icon(
-                  latestOk
-                      ? Icons.check_circle_outline
-                      : Icons.warning_amber_outlined,
-                  size: 16,
-                  color: latestOk ? Colors.green : Colors.orange,
-                ),
-                label: Text(
-                  'Latest: ${latest.toStringAsFixed(1)}',
-                  style: TextStyle(
-                    color: latestOk ? Colors.green : Colors.orange,
-                    fontWeight: FontWeight.w600,
+                      if (description.isNotEmpty)
+                        Text(
+                          description,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
+                        ),
+                    ],
                   ),
                 ),
-                backgroundColor: (latestOk ? Colors.green : Colors.orange)
-                    .withValues(alpha: 0.1),
-                side: BorderSide.none,
-                padding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
-              ),
-            ]),
+                const SizedBox(width: 8),
+                Chip(
+                  avatar: Icon(
+                    latestOk
+                        ? Icons.check_circle_outline
+                        : Icons.warning_amber_outlined,
+                    size: 16,
+                    color: latestOk ? Colors.green : Colors.orange,
+                  ),
+                  label: Text(
+                    'Latest: ${latest.toStringAsFixed(1)}',
+                    style: TextStyle(
+                      color: latestOk ? Colors.green : Colors.orange,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  backgroundColor: (latestOk ? Colors.green : Colors.orange)
+                      .withValues(alpha: 0.1),
+                  side: BorderSide.none,
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
 
             // ── Ideal range label ────────────────────────────────────
             if (idealLower != null || idealUpper != null)
@@ -1222,9 +1254,9 @@ class _ThreeDBarChartCard extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 4, bottom: 8),
                 child: Text(
                   'Ideal range: ${idealLower?.toStringAsFixed(1) ?? '–'} – ${idealUpper?.toStringAsFixed(1) ?? '–'}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.green.shade700,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.green.shade700),
                 ),
               )
             else
@@ -1247,9 +1279,9 @@ class _ThreeDBarChartCard extends StatelessWidget {
             // ── Data table (collapsible) ─────────────────────────────
             const SizedBox(height: 4),
             Theme(
-              data: Theme.of(context).copyWith(
-                dividerColor: Colors.transparent,
-              ),
+              data: Theme.of(
+                context,
+              ).copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
                 title: const Text(
                   'View Data',
@@ -1286,27 +1318,21 @@ class _ThreeDBarChartCard extends StatelessWidget {
       children: [
         TableRow(
           decoration: BoxDecoration(
-            color:
-                colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(6)),
+            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
           ),
-          children: [
-            _th('Date'),
-            _th('Value'),
-            _th('Status'),
-          ],
+          children: [_th('Date'), _th('Value'), _th('Status')],
         ),
         ...points.map((p) {
           final val = p.row.readingValue;
-          final ok = (idealLower == null || val >= idealLower) &&
+          final ok =
+              (idealLower == null || val >= idealLower) &&
               (idealUpper == null || val <= idealUpper);
           return TableRow(
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color:
-                      colorScheme.outlineVariant.withValues(alpha: 0.4),
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.4),
                 ),
               ),
             ),
@@ -1314,24 +1340,27 @@ class _ThreeDBarChartCard extends StatelessWidget {
               _td(_fmtDate(p.date)),
               _td(val.toStringAsFixed(2)),
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                child: Row(children: [
-                  Icon(
-                    ok
-                        ? Icons.check_circle_outline
-                        : Icons.warning_amber_outlined,
-                    size: 14,
-                    color: ok ? Colors.green : Colors.orange,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(ok ? 'Normal' : 'Review',
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      ok
+                          ? Icons.check_circle_outline
+                          : Icons.warning_amber_outlined,
+                      size: 14,
+                      color: ok ? Colors.green : Colors.orange,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      ok ? 'Normal' : 'Review',
                       style: TextStyle(
                         fontSize: 12,
                         color: ok ? Colors.green : Colors.orange,
                         fontWeight: FontWeight.w500,
-                      )),
-                ]),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           );
@@ -1341,16 +1370,17 @@ class _ThreeDBarChartCard extends StatelessWidget {
   }
 
   Widget _th(String t) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-        child: Text(t,
-            style:
-                const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-      );
+    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+    child: Text(
+      t,
+      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+    ),
+  );
 
   Widget _td(String t) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-        child: Text(t, style: const TextStyle(fontSize: 12)),
-      );
+    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+    child: Text(t, style: const TextStyle(fontSize: 12)),
+  );
 }
 
 // ─── 3D bar chart painter ─────────────────────────────────────────────────────
@@ -1408,8 +1438,7 @@ class _ThreeDBarPainter extends CustomPainter {
     for (int i = 0; i <= 4; i++) {
       final v = effMin + effRange * i / 4;
       final y = toY(v);
-      canvas.drawLine(
-          Offset(chartL, y), Offset(chartR + _dx, y), gridPaint);
+      canvas.drawLine(Offset(chartL, y), Offset(chartR + _dx, y), gridPaint);
 
       final tp = TextPainter(
         text: TextSpan(
@@ -1470,7 +1499,8 @@ class _ThreeDBarPainter extends CustomPainter {
       final bB = chartB;
       final bR = bL + barW;
 
-      final ok = (idealLower == null || value >= idealLower!) &&
+      final ok =
+          (idealLower == null || value >= idealLower!) &&
           (idealUpper == null || value <= idealUpper!);
       final fc = ok ? frontColor : badFront;
       final tc = ok ? topColor : badTop;
@@ -1512,15 +1542,15 @@ class _ThreeDBarPainter extends CustomPainter {
           text: TextSpan(
             text: value.toStringAsFixed(1),
             style: const TextStyle(
-                fontSize: 8,
-                color: Colors.white,
-                fontWeight: FontWeight.bold),
+              fontSize: 8,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           textDirection: TextDirection.ltr,
         );
         vTp.layout();
-        vTp.paint(
-            canvas, Offset(bL + (barW - vTp.width) / 2, bT + 4));
+        vTp.paint(canvas, Offset(bL + (barW - vTp.width) / 2, bT + 4));
       }
 
       // X-axis date label
@@ -1536,11 +1566,9 @@ class _ThreeDBarPainter extends CustomPainter {
       );
       dTp.layout(maxWidth: slotW + _dx);
       dTp.paint(
-          canvas,
-          Offset(
-            bL + barW / 2 - dTp.width / 2 + _dx / 2,
-            chartB + 4,
-          ));
+        canvas,
+        Offset(bL + barW / 2 - dTp.width / 2 + _dx / 2, chartB + 4),
+      );
     }
 
     // ── Bottom axis line ─────────────────────────────────────────
@@ -1619,7 +1647,8 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
     }
 
     final latest = points.last.row.readingValue;
-    final latestOk = (idealLower == null || latest >= idealLower) &&
+    final latestOk =
+        (idealLower == null || latest >= idealLower) &&
         (idealUpper == null || latest <= idealUpper);
 
     return Card(
@@ -1629,58 +1658,58 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(widget.keyword,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold)),
-                    if (description.isNotEmpty)
-                      Text(description,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(
-                                  color: colorScheme.onSurfaceVariant)),
-                  ],
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.keyword,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      if (description.isNotEmpty)
+                        Text(
+                          description,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Chip(
-                avatar: Icon(
-                  latestOk
-                      ? Icons.check_circle_outline
-                      : Icons.warning_amber_outlined,
-                  size: 16,
-                  color: latestOk ? Colors.green : Colors.orange,
-                ),
-                label: Text(
-                  'Latest: ${latest.toStringAsFixed(1)}',
-                  style: TextStyle(
+                const SizedBox(width: 8),
+                Chip(
+                  avatar: Icon(
+                    latestOk
+                        ? Icons.check_circle_outline
+                        : Icons.warning_amber_outlined,
+                    size: 16,
+                    color: latestOk ? Colors.green : Colors.orange,
+                  ),
+                  label: Text(
+                    'Latest: ${latest.toStringAsFixed(1)}',
+                    style: TextStyle(
                       color: latestOk ? Colors.green : Colors.orange,
-                      fontWeight: FontWeight.w600),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  backgroundColor: (latestOk ? Colors.green : Colors.orange)
+                      .withValues(alpha: 0.1),
+                  side: BorderSide.none,
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
                 ),
-                backgroundColor:
-                    (latestOk ? Colors.green : Colors.orange)
-                        .withValues(alpha: 0.1),
-                side: BorderSide.none,
-                padding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
-              ),
-            ]),
+              ],
+            ),
             if (idealLower != null || idealUpper != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4, bottom: 8),
                 child: Text(
                   'Ideal range: ${idealLower?.toStringAsFixed(1) ?? '–'} – ${idealUpper?.toStringAsFixed(1) ?? '–'}',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Colors.green.shade700),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.green.shade700),
                 ),
               )
             else
@@ -1699,8 +1728,7 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
                     drawVerticalLine: false,
                     horizontalInterval: (chartMaxY - chartMinY) / 4,
                     getDrawingHorizontalLine: (value) => FlLine(
-                      color: colorScheme.outlineVariant
-                          .withValues(alpha: 0.5),
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.5),
                       strokeWidth: 1,
                     ),
                   ),
@@ -1708,37 +1736,40 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
                     show: true,
                     border: Border(
                       bottom: BorderSide(
-                          color: colorScheme.outline
-                              .withValues(alpha: 0.4)),
+                        color: colorScheme.outline.withValues(alpha: 0.4),
+                      ),
                       left: BorderSide(
-                          color: colorScheme.outline
-                              .withValues(alpha: 0.4)),
+                        color: colorScheme.outline.withValues(alpha: 0.4),
+                      ),
                     ),
                   ),
                   titlesData: FlTitlesData(
                     rightTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                     topTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
                         reservedSize: 36,
-                        interval: (chartMaxX - chartMinX) /
+                        interval:
+                            (chartMaxX - chartMinX) /
                             (points.length > 1
                                 ? (points.length - 1).toDouble()
                                 : 1),
                         getTitlesWidget: (value, meta) {
-                          final dt = epoch.add(Duration(
-                              minutes: (value * 1440).round()));
+                          final dt = epoch.add(
+                            Duration(minutes: (value * 1440).round()),
+                          );
                           return SideTitleWidget(
                             meta: meta,
                             child: Text(
                               _fmtDate(dt),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelSmall
-                                  ?.copyWith(fontSize: 9),
+                              style: Theme.of(
+                                context,
+                              ).textTheme.labelSmall?.copyWith(fontSize: 9),
                               textAlign: TextAlign.center,
                             ),
                           );
@@ -1755,10 +1786,10 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
                           }
                           return SideTitleWidget(
                             meta: meta,
-                            child: Text(value.toStringAsFixed(1),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelSmall),
+                            child: Text(
+                              value.toStringAsFixed(1),
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
                           );
                         },
                       ),
@@ -1769,38 +1800,36 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
                       if (idealLower != null)
                         HorizontalLine(
                           y: idealLower,
-                          color:
-                              Colors.green.withValues(alpha: 0.8),
+                          color: Colors.green.withValues(alpha: 0.8),
                           strokeWidth: 1.5,
                           dashArray: [6, 4],
                           label: HorizontalLineLabel(
                             show: true,
                             alignment: Alignment.topRight,
-                            padding: const EdgeInsets.only(
-                                right: 4, bottom: 2),
+                            padding: const EdgeInsets.only(right: 4, bottom: 2),
                             style: const TextStyle(
-                                fontSize: 9,
-                                color: Colors.green,
-                                fontWeight: FontWeight.w600),
+                              fontSize: 9,
+                              color: Colors.green,
+                              fontWeight: FontWeight.w600,
+                            ),
                             labelResolver: (_) => 'Min',
                           ),
                         ),
                       if (idealUpper != null)
                         HorizontalLine(
                           y: idealUpper,
-                          color:
-                              Colors.green.withValues(alpha: 0.8),
+                          color: Colors.green.withValues(alpha: 0.8),
                           strokeWidth: 1.5,
                           dashArray: [6, 4],
                           label: HorizontalLineLabel(
                             show: true,
                             alignment: Alignment.bottomRight,
-                            padding: const EdgeInsets.only(
-                                right: 4, top: 2),
+                            padding: const EdgeInsets.only(right: 4, top: 2),
                             style: const TextStyle(
-                                fontSize: 9,
-                                color: Colors.green,
-                                fontWeight: FontWeight.w600),
+                              fontSize: 9,
+                              color: Colors.green,
+                              fontWeight: FontWeight.w600,
+                            ),
                             labelResolver: (_) => 'Max',
                           ),
                         ),
@@ -1808,17 +1837,16 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
                   ),
                   lineTouchData: LineTouchData(
                     touchCallback: (event, response) {
-                      final idx =
-                          response?.lineBarSpots?.first.spotIndex;
+                      final idx = response?.lineBarSpots?.first.spotIndex;
                       if (mounted) setState(() => _touchedIndex = idx);
                     },
                     touchTooltipData: LineTouchTooltipData(
-                      getTooltipColor: (_) =>
-                          colorScheme.inverseSurface,
+                      getTooltipColor: (_) => colorScheme.inverseSurface,
                       tooltipRoundedRadius: 8,
                       getTooltipItems: (spots) => spots.map((spot) {
-                        final dt = epoch.add(Duration(
-                            minutes: (spot.x * 1440).round()));
+                        final dt = epoch.add(
+                          Duration(minutes: (spot.x * 1440).round()),
+                        );
                         return LineTooltipItem(
                           '${spot.y.toStringAsFixed(2)}\n${_fmtDate(dt)}',
                           TextStyle(
@@ -1835,7 +1863,7 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
                       LineChartBarData(
                         spots: [
                           FlSpot(chartMinX, idealLower),
-                          FlSpot(chartMaxX, idealLower)
+                          FlSpot(chartMaxX, idealLower),
                         ],
                         isCurved: false,
                         color: Colors.transparent,
@@ -1846,7 +1874,7 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
                       LineChartBarData(
                         spots: [
                           FlSpot(chartMinX, idealUpper),
-                          FlSpot(chartMaxX, idealUpper)
+                          FlSpot(chartMaxX, idealUpper),
                         ],
                         isCurved: false,
                         color: Colors.transparent,
@@ -1864,8 +1892,7 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
                       dotData: FlDotData(
                         show: true,
                         getDotPainter: (spot, percent, barData, index) {
-                          final value =
-                              points[index].row.readingValue;
+                          final value = points[index].row.readingValue;
                           final isTouched = index == _touchedIndex;
                           return FlDotCirclePainter(
                             radius: isTouched ? 7 : 4,
@@ -1877,30 +1904,27 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
                       ),
                       belowBarData: BarAreaData(
                         show: true,
-                        color:
-                            colorScheme.primary.withValues(alpha: 0.08),
+                        color: colorScheme.primary.withValues(alpha: 0.08),
                       ),
                     ),
                   ],
-                  betweenBarsData:
-                      idealLower != null && idealUpper != null
-                          ? [
-                              BetweenBarsData(
-                                fromIndex: 0,
-                                toIndex: 1,
-                                color: Colors.green
-                                    .withValues(alpha: 0.10),
-                              )
-                            ]
-                          : [],
+                  betweenBarsData: idealLower != null && idealUpper != null
+                      ? [
+                          BetweenBarsData(
+                            fromIndex: 0,
+                            toIndex: 1,
+                            color: Colors.green.withValues(alpha: 0.10),
+                          ),
+                        ]
+                      : [],
                 ),
               ),
             ),
             const SizedBox(height: 4),
             Theme(
-              data: Theme.of(context).copyWith(
-                dividerColor: Colors.transparent,
-              ),
+              data: Theme.of(
+                context,
+              ).copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
                 title: const Text(
                   'View Data',
@@ -1937,27 +1961,21 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
       children: [
         TableRow(
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest
-                .withValues(alpha: 0.6),
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(6)),
+            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
           ),
-          children: [
-            _th('Date'),
-            _th('Value'),
-            _th('Status'),
-          ],
+          children: [_th('Date'), _th('Value'), _th('Status')],
         ),
         ...points.map((p) {
           final val = p.row.readingValue;
-          final ok = (idealLower == null || val >= idealLower) &&
+          final ok =
+              (idealLower == null || val >= idealLower) &&
               (idealUpper == null || val <= idealUpper);
           return TableRow(
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: colorScheme.outlineVariant
-                      .withValues(alpha: 0.4),
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.4),
                 ),
               ),
             ),
@@ -1965,24 +1983,27 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
               _th2(_fmtDate(p.date)),
               _th2(val.toStringAsFixed(2)),
               Padding(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 6, horizontal: 8),
-                child: Row(children: [
-                  Icon(
-                    ok
-                        ? Icons.check_circle_outline
-                        : Icons.warning_amber_outlined,
-                    size: 14,
-                    color: ok ? Colors.green : Colors.orange,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(ok ? 'Normal' : 'Review',
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      ok
+                          ? Icons.check_circle_outline
+                          : Icons.warning_amber_outlined,
+                      size: 14,
+                      color: ok ? Colors.green : Colors.orange,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      ok ? 'Normal' : 'Review',
                       style: TextStyle(
                         fontSize: 12,
                         color: ok ? Colors.green : Colors.orange,
                         fontWeight: FontWeight.w500,
-                      )),
-                ]),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           );
@@ -1992,16 +2013,17 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
   }
 
   Widget _th(String t) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-        child: Text(t,
-            style: const TextStyle(
-                fontSize: 12, fontWeight: FontWeight.bold)),
-      );
+    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+    child: Text(
+      t,
+      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+    ),
+  );
 
   Widget _th2(String t) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-        child: Text(t, style: const TextStyle(fontSize: 12)),
-      );
+    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+    child: Text(t, style: const TextStyle(fontSize: 12)),
+  );
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -2009,13 +2031,33 @@ class _KeywordChartCardState extends State<_KeywordChartCard> {
 /// Formats a [DateTime] as `dd-MMM-yy` (e.g. `03-Apr-25`).
 String _fmtDate(DateTime dt) {
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   final d = dt.day.toString().padLeft(2, '0');
   final m = months[dt.month - 1];
   final y = dt.year.toString().substring(2);
   return '$d-$m-$y';
+}
+
+String _fmtNumber(double value) {
+  if (value == value.roundToDouble()) {
+    return value.toStringAsFixed(0);
+  }
+  return value
+      .toStringAsFixed(2)
+      .replaceFirst(RegExp(r'0+$'), '')
+      .replaceFirst(RegExp(r'\.$'), '');
 }
 
 class _DataPoint {
@@ -2025,20 +2067,14 @@ class _DataPoint {
 }
 
 class _BucketRange {
-  const _BucketRange({
-    required this.label,
-    required this.matches,
-  });
+  const _BucketRange({required this.label, required this.matches});
 
   final String label;
   final bool Function(double value) matches;
 }
 
 class _BucketCount {
-  const _BucketCount({
-    required this.label,
-    required this.count,
-  });
+  const _BucketCount({required this.label, required this.count});
 
   final String label;
   final int count;
