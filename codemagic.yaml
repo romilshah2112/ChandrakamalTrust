@@ -1,237 +1,80 @@
-# =============================================================================
-# codemagic.yaml  –  Optima Healthcare Mobile
-# Docs: https://docs.codemagic.io/yaml/yaml-getting-started/
-#
-# HOW TO USE
-# ──────────
-# 1. Push this file to the root of your Git repository.
-# 2. Connect the repository in Codemagic (https://codemagic.io).
-# 3. The following variables must be set as Global variables in
-#    Codemagic UI → Teams → Global variables & secrets
-#    (they are already added and injected automatically — no groups needed):
-#
-#      APP_STORE_CONNECT_KEY_IDENTIFIER  – Key ID from App Store Connect
-#      APP_STORE_CONNECT_ISSUER_ID       – Issuer UUID from App Store Connect
-#      APP_STORE_CONNECT_PRIVATE_KEY     – Full content of your .p8 API key file
-#      CERTIFICATE_PRIVATE_KEY          – RSA 2048 private key PEM content
-#
-# 4. Register your bundle ID in App Store Connect, then fill in
-#    APP_STORE_APP_ID below.
-#
-# PREREQUISITE – Podfile
-# ──────────────────────
-# The Podfile is not yet committed to this repo.  Before the first CI run:
-#   1. On a Mac with Xcode and CocoaPods installed, run:
-#        cd mobile && flutter pub get
-#   2. Commit the generated ios/Podfile (but NOT ios/Pods/) to Git.
-#
-# =============================================================================
-
-definitions:
-  # Shared environment used by both iOS workflows.
-  # Global variables are injected automatically — no 'groups' key needed.
-  ios_base_env: &ios_base_env
-    flutter: stable         # Pin to e.g. "3.32.0" once you settle on a version
-    xcode: latest           # Xcode 16+
-    cocoapods: default
-
-# =============================================================================
+# Required in Codemagic apple_credentials group:
+# CERTIFICATE_PRIVATE_KEY = paste full content of ios_distribution.key (including -----BEGIN/END-----)
+# If newlines are lost, use \n between lines: -----BEGIN PRIVATE KEY-----\nMIGT...\n-----END PRIVATE KEY-----
 workflows:
-# =============================================================================
+  ios-workflow:
+    name: iOS Build
 
-  # ── 1. iOS Release  (App Store / TestFlight) ─────────────────────────────
-  ios-release:
-    name: "iOS — Release (TestFlight / App Store)"
-    instance_type: mac_mini_m2    # Apple Silicon; faster & cheaper than mac_pro
-    max_build_duration: 60        # minutes; fail fast if hung
+    integrations:
+      app_store_connect: Codemagic
 
     environment:
-      <<: *ios_base_env
-      vars:
-        # ── App identifiers ────────────────────────────────────────────────
-        BUNDLE_ID: "com.optimahealthcare.optimaHealthcareMobile"
-
-        # ── Runtime config ─────────────────────────────────────────────────
-        # Baked into the binary at build time via --dart-define.
-        API_BASE_URL: "https://optimahealthapp-production.up.railway.app"
-
-        # ── Build metadata ──────────────────────────────────────────────────
-        FLUTTER_APP_DIR: "mobile"           # subfolder containing pubspec.yaml
-        XCODE_SCHEME: "Runner"
-        XCODE_WORKSPACE: "mobile/ios/Runner.xcworkspace"
-
-    triggering:
-      events:
-        - push
-        - tag
-      branch_patterns:
-        - pattern: "main"
-          include: true
-          source: true
-      tag_patterns:
-        # Trigger a release build for any tag matching "v*" (e.g. v1.0.0)
-        - pattern: "v*"
-          include: true
-      cancel_previous_builds: true
+      flutter: stable
+      xcode: latest
+      groups:
+        - apple_credentials
 
     scripts:
-      # ── 1. Fetch Flutter packages ─────────────────────────────────────────
-      - name: Flutter — pub get
+      - name: Install dependencies
         script: |
-          cd "$FLUTTER_APP_DIR"
+          cd mobile
           flutter pub get
 
-      # ── 2. Install CocoaPods ──────────────────────────────────────────────
-      # flutter build ipa handles pod install internally, but running it
-      # explicitly here catches dependency errors early and speeds the main step.
-      - name: CocoaPods — pod install
+      - name: Generate launcher icons
         script: |
-          cd "$FLUTTER_APP_DIR/ios"
-          pod install --repo-update
+          cd mobile
+          dart run flutter_launcher_icons
 
-      # ── 3. Code signing ───────────────────────────────────────────────────
-      # • Reuses your existing Apple Distribution certificate (same account).
-      # • Fetches / auto-creates an App Store provisioning profile for this
-      #   bundle ID and signs it with that certificate.
-      # • xcode-project use-profiles patches Runner.xcodeproj to Manual signing
-      #   and writes the export options plist, storing its path in
-      #   $CM_EXPORT_OPTIONS_PATH (used in the build step below).
-      - name: iOS — set up code signing
+      - name: Pod install
+        script: |
+          cd mobile/ios
+          pod install
+
+      - name: Fetch signing files and set up code signing
         script: |
           keychain initialize
-
-          # Pass all four credentials explicitly so missing variables fail early
-          # with a clear message rather than a cryptic signing error.
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --issuer-id="$APP_STORE_CONNECT_ISSUER_ID" \
-            --key-id="$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key=@env:APP_STORE_CONNECT_PRIVATE_KEY \
-            --certificate-key=@env:CERTIFICATE_PRIVATE_KEY \
-            --create
-
+          if [ -z "$CERTIFICATE_PRIVATE_KEY" ]; then
+            echo "ERROR: CERTIFICATE_PRIVATE_KEY not set. Add it to apple_credentials group."
+            exit 1
+          fi
+          printf '%b' "$CERTIFICATE_PRIVATE_KEY" > /tmp/cert_key.pem
+          app-store-connect fetch-signing-files com.scdinsight.app --type IOS_APP_STORE --create \
+            --certificate-key @file:/tmp/cert_key.pem \
+            --profiles-dir "$HOME/Library/MobileDevice/Provisioning Profiles" \
+            --certificates-dir "$HOME/Library/MobileDevice/Certificates"
           keychain add-certificates
-          xcode-project use-profiles
+          cd frontend
+          xcode-project use-profiles --project ios/Runner.xcodeproj --archive-method app-store --warn-only || true
+          PROFILE_FILE=$(ls "$HOME/Library/MobileDevice/Provisioning Profiles"/*.mobileprovision "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"/*.mobileprovision 2>/dev/null | head -1)
+          if [ -z "$PROFILE_FILE" ]; then
+            echo "ERROR: No provisioning profile found. Check fetch-signing-files output above."
+            ls -la "$HOME/Library/MobileDevice/Provisioning Profiles" 2>/dev/null || true
+            exit 1
+          fi
+          security cms -D -i "$PROFILE_FILE" > /tmp/profile.plist 2>/dev/null
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/profile.plist 2>/dev/null)
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" /tmp/profile.plist 2>/dev/null)
+          echo "Profile: $PROFILE_NAME (UUID: $PROFILE_UUID)"
+          if [ -z "$PROFILE_UUID" ]; then
+            echo "ERROR: Could not extract profile UUID"
+            exit 1
+          fi
+          sed -i.bak "s/__CI_PROFILE_UUID__/$PROFILE_UUID/g" ios/Runner.xcodeproj/project.pbxproj
+          cp ios/ExportOptions.plist $HOME/export_options.plist
+          [ -n "$PROFILE_NAME" ] && /usr/libexec/PlistBuddy -c "Set :provisioningProfiles:com.scdinsight.app \"$PROFILE_NAME\"" $HOME/export_options.plist 2>/dev/null || true
 
-          # Print active identities and export options to help diagnose issues
-          echo "=== Installed code-signing identities ==="
-          security find-identity -v -p codesigning
-          echo "=== Export options ==="
-          cat "$CM_EXPORT_OPTIONS_PATH"
-
-      # ── 4. Build IPA ──────────────────────────────────────────────────────
-      - name: Flutter — build IPA (release)
+      - name: Build IPA
         script: |
-          cd "$FLUTTER_APP_DIR"
+          cd frontend
+          flutter build ipa --release \
+            --build-number=$BUILD_NUMBER \
+            --dart-define=API_BASE_URL=https://chandrakamaltrust-production.up.railway.app \
+            --export-options-plist=$HOME/export_options.plist
 
-          # Derive build number from Codemagic's pipeline counter so each build
-          # uploaded to App Store Connect has a unique CFBundleVersion.
-          BUILD_NUMBER=$PROJECT_BUILD_NUMBER
-
-          # $CM_EXPORT_OPTIONS_PATH is set by "xcode-project use-profiles" above.
-          # It contains method=app-store and the correct provisioning profile name.
-          flutter build ipa \
-            --release \
-            --build-number="$BUILD_NUMBER" \
-            --dart-define=API_BASE_URL="$API_BASE_URL" \
-            --export-options-plist="$CM_EXPORT_OPTIONS_PATH"
-
-    # ── Artifacts to collect ─────────────────────────────────────────────────
     artifacts:
       - mobile/build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
-      - mobile/flutter_drive.log
 
-    # ── Notifications & publishing ────────────────────────────────────────────
     publishing:
-      email:
-        recipients:
-          - developer@optimahealthcare.com   # ← replace with your address
-        notify:
-          success: true
-          failure: true
-
       app_store_connect:
-        # Reads APP_STORE_CONNECT_* vars injected from Codemagic global variables
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        auth: integration
         submit_to_testflight: true
-        # Automatically add new builds to this TestFlight group:
-        beta_groups:
-          - "Internal Testers"             # ← adjust to your TestFlight group
-        # Set to true only when ready to submit to App Store Review:
-        submit_to_app_store: false
-
-
-  # ── 2. iOS Development / Ad-hoc  (physical device testing) ───────────────
-  ios-development:
-    name: "iOS — Development (Ad-hoc)"
-    instance_type: mac_mini_m2
-    max_build_duration: 45
-
-    environment:
-      <<: *ios_base_env
-      vars:
-        BUNDLE_ID: "com.optimahealthcare.optimaHealthcareMobile"
-        API_BASE_URL: "https://optimahealthapp-production.up.railway.app"
-        FLUTTER_APP_DIR: "mobile"
-
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: "develop"
-          include: true
-          source: true
-        - pattern: "feature/*"
-          include: true
-          source: true
-      cancel_previous_builds: true
-
-    scripts:
-      - name: Flutter — pub get
-        script: |
-          cd "$FLUTTER_APP_DIR"
-          flutter pub get
-
-      - name: CocoaPods — pod install
-        script: |
-          cd "$FLUTTER_APP_DIR/ios"
-          pod install --repo-update
-
-      - name: iOS — set up code signing (Ad-hoc)
-        script: |
-          keychain initialize
-
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_ADHOC \
-            --issuer-id="$APP_STORE_CONNECT_ISSUER_ID" \
-            --key-id="$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key=@env:APP_STORE_CONNECT_PRIVATE_KEY \
-            --certificate-key=@env:CERTIFICATE_PRIVATE_KEY \
-            --create
-
-          keychain add-certificates
-          xcode-project use-profiles
-
-      - name: Flutter — build IPA (ad-hoc)
-        script: |
-          cd "$FLUTTER_APP_DIR"
-          flutter build ipa \
-            --release \
-            --build-number="$PROJECT_BUILD_NUMBER" \
-            --dart-define=API_BASE_URL="$API_BASE_URL" \
-            --export-options-plist="$CM_EXPORT_OPTIONS_PATH"
-
-    artifacts:
-      - mobile/build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
-
-    publishing:
-      email:
-        recipients:
-          - developer@optimahealthcare.com
-        notify:
-          success: true
-          failure: true
