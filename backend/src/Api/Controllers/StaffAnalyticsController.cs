@@ -21,16 +21,32 @@ public sealed class StaffAnalyticsController : ControllerBase
 
     [HttpGet("dashboard")]
     [ProducesResponseType(typeof(StaffDashboardAnalyticsDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<StaffDashboardAnalyticsDto>> Dashboard(CancellationToken cancellationToken)
+    public async Task<ActionResult<StaffDashboardAnalyticsDto>> Dashboard([FromQuery] string? referenceName, CancellationToken cancellationToken)
     {
-        var role = User.GetRoleName();
-        var allowed = AllowedRoles.Any(allowedRole =>
-            role.Contains(allowedRole, StringComparison.OrdinalIgnoreCase));
-        if (!allowed)
+        if (!IsAllowed())
         {
             return Forbid();
         }
 
-        return Ok(await _staffAnalyticsService.GetDashboardAsync(cancellationToken));
+        return Ok(await _staffAnalyticsService.GetDashboardAsync(referenceName, cancellationToken));
+    }
+
+    [HttpGet("reference-names")]
+    [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<string>>> ReferenceNames(CancellationToken cancellationToken)
+    {
+        if (!IsAllowed())
+        {
+            return Forbid();
+        }
+
+        return Ok(await _staffAnalyticsService.ListReferenceNamesAsync(cancellationToken));
+    }
+
+    private bool IsAllowed()
+    {
+        var role = User.GetRoleName();
+        return AllowedRoles.Any(allowedRole =>
+            role.Contains(allowedRole, StringComparison.OrdinalIgnoreCase));
     }
 }

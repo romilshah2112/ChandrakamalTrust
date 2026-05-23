@@ -18,25 +18,30 @@ public sealed class SqlStaffAnalyticsService : IStaffAnalyticsService
             ?? throw new InvalidOperationException("Connection string not found. Use ConnectionStrings:HealthCareContext or DefaultConnection.");
     }
 
-    public async Task<StaffDashboardAnalyticsDto> GetDashboardAsync(CancellationToken cancellationToken)
+    public async Task<StaffDashboardAnalyticsDto> GetDashboardAsync(string? referenceName, CancellationToken cancellationToken)
     {
         await using var con = new SqlConnection(_connectionString);
         await con.OpenAsync(cancellationToken);
 
-        var patientsByGender = await LoadPatientsByGenderAsync(con, cancellationToken);
-        var patientsByAgeGroup = await LoadPatientsByAgeGroupAsync(con, cancellationToken);
-        var patientsByCity = await LoadPatientsByCityAsync(con, cancellationToken);
+        var cleanReferenceName = string.IsNullOrWhiteSpace(referenceName) ? null : referenceName.Trim();
+
+        var patientsByGender = await LoadPatientsByGenderAsync(con, cleanReferenceName, cancellationToken);
+        var patientsByAgeGroup = await LoadPatientsByAgeGroupAsync(con, cleanReferenceName, cancellationToken);
+        var patientsByCity = await LoadPatientsByCityAsync(con, cleanReferenceName, cancellationToken);
         var patientsByBPSystolicRange = await LoadPatientsByVitalsRangeAsync(
             con,
             "BPSys",
+            cleanReferenceName,
             cancellationToken);
         var patientsByBPDiastolicRange = await LoadPatientsByVitalsRangeAsync(
             con,
             "BPDys",
+            cleanReferenceName,
             cancellationToken);
         var patientsByBloodSugarRange = await LoadPatientsByVitalsRangeAsync(
             con,
             "BloodSugar",
+            cleanReferenceName,
             cancellationToken);
 
         return new StaffDashboardAnalyticsDto
@@ -50,8 +55,39 @@ public sealed class SqlStaffAnalyticsService : IStaffAnalyticsService
         };
     }
 
+    public async Task<IReadOnlyList<string>> ListReferenceNamesAsync(CancellationToken cancellationToken)
+    {
+        const string sql = @"
+SELECT DISTINCT LTRIM(RTRIM(pd.[ReferenceName])) AS [ReferenceName]
+FROM [patientdata] pd
+WHERE ISNULL(pd.[IsActive], 1) = 1
+  AND pd.[lReferenceTypeId] = @healthCampReferenceTypeId
+  AND pd.[ReferenceName] IS NOT NULL
+  AND LTRIM(RTRIM(pd.[ReferenceName])) <> ''
+ORDER BY [ReferenceName]";
+
+        await using var con = new SqlConnection(_connectionString);
+        await con.OpenAsync(cancellationToken);
+        await using var cmd = new SqlCommand(sql, con);
+        cmd.Parameters.AddWithValue("@healthCampReferenceTypeId", HealthCampReferenceTypeId);
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+
+        var list = new List<string>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var value = reader["ReferenceName"]?.ToString();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                list.Add(value.Trim());
+            }
+        }
+
+        return list;
+    }
+
     private static async Task<IReadOnlyList<AnalyticsPointDto>> LoadPatientsByGenderAsync(
         SqlConnection con,
+        string? referenceName,
         CancellationToken cancellationToken)
     {
         const string sql = @"
@@ -64,6 +100,7 @@ SELECT
 FROM [patientdata] pd
 WHERE ISNULL(pd.[IsActive], 1) = 1
   AND pd.[lReferenceTypeId] = @healthCampReferenceTypeId
+  AND (@referenceName IS NULL OR LTRIM(RTRIM(pd.[ReferenceName])) = @referenceName)
 GROUP BY
     CASE
         WHEN pd.[Gender] IS NULL OR LTRIM(RTRIM(pd.[Gender])) = '' THEN 'Unknown'
@@ -71,11 +108,12 @@ GROUP BY
     END
 ORDER BY [Label]";
 
-        return await LoadPointsAsync(con, sql, cancellationToken);
+        return await LoadPointsAsync(con, sql, referenceName, cancellationToken);
     }
 
     private static async Task<IReadOnlyList<AnalyticsPointDto>> LoadPatientsByAgeGroupAsync(
         SqlConnection con,
+        string? referenceName,
         CancellationToken cancellationToken)
     {
         const string sql = @"
@@ -92,12 +130,13 @@ WITH PatientAges AS (
     FROM [patientdata] pd
     WHERE ISNULL(pd.[IsActive], 1) = 1
       AND pd.[lReferenceTypeId] = @healthCampReferenceTypeId
+      AND (@referenceName IS NULL OR LTRIM(RTRIM(pd.[ReferenceName])) = @referenceName)
 )
 SELECT [Label], COUNT(1) AS [Value]
 FROM PatientAges
 GROUP BY [Label]";
 
-        var points = await LoadPointsAsync(con, sql, cancellationToken);
+        var points = await LoadPointsAsync(con, sql, referenceName, cancellationToken);
         var orderedLabels = new[] { "0-17", "18-30", "31-45", "46-60", "60+", "Unknown" };
         return orderedLabels
             .Select(label => points.FirstOrDefault(point => point.Label == label) ?? new AnalyticsPointDto { Label = label, Value = 0 })
@@ -106,6 +145,7 @@ GROUP BY [Label]";
 
     private static async Task<IReadOnlyList<AnalyticsPointDto>> LoadPatientsByCityAsync(
         SqlConnection con,
+        string? referenceName,
         CancellationToken cancellationToken)
     {
         const string sql = @"
@@ -118,6 +158,7 @@ SELECT
 FROM [patientdata] pd
 WHERE ISNULL(pd.[IsActive], 1) = 1
   AND pd.[lReferenceTypeId] = @healthCampReferenceTypeId
+  AND (@referenceName IS NULL OR LTRIM(RTRIM(pd.[ReferenceName])) = @referenceName)
 GROUP BY
     CASE
         WHEN pd.[City] IS NULL OR LTRIM(RTRIM(pd.[City])) = '' THEN 'Unknown'
@@ -125,12 +166,13 @@ GROUP BY
     END
 ORDER BY [Value] DESC, [Label]";
 
-        return await LoadPointsAsync(con, sql, cancellationToken);
+        return await LoadPointsAsync(con, sql, referenceName, cancellationToken);
     }
 
     private static async Task<IReadOnlyList<AnalyticsPointDto>> LoadPatientsByVitalsRangeAsync(
         SqlConnection con,
         string metricColumn,
+        string? referenceName,
         CancellationToken cancellationToken)
     {
         var sql = $@"
@@ -146,6 +188,7 @@ WITH RankedVitals AS (
     INNER JOIN [patientdata] pd ON pd.[lPatientDataId] = pv.[lPatientDataId]
     WHERE ISNULL(pd.[IsActive], 1) = 1
       AND pd.[lReferenceTypeId] = @healthCampReferenceTypeId
+      AND (@referenceName IS NULL OR LTRIM(RTRIM(pd.[ReferenceName])) = @referenceName)
       AND ISNULL(pv.[IsActive], 1) = 1
 ),
 Bucketed AS (
@@ -166,7 +209,7 @@ SELECT [Label], COUNT(1) AS [Value]
 FROM Bucketed
 GROUP BY [Label]";
 
-        var points = await LoadPointsAsync(con, sql, cancellationToken);
+        var points = await LoadPointsAsync(con, sql, referenceName, cancellationToken);
         var orderedLabels = new[] { "< 80", "80 - 100", "100 - 120", "120 - 140", "140 - 160", "> 160", "Unknown" };
         return orderedLabels
             .Select(label => points.FirstOrDefault(point => point.Label == label) ?? new AnalyticsPointDto { Label = label, Value = 0 })
@@ -176,10 +219,12 @@ GROUP BY [Label]";
     private static async Task<IReadOnlyList<AnalyticsPointDto>> LoadPointsAsync(
         SqlConnection con,
         string sql,
+        string? referenceName,
         CancellationToken cancellationToken)
     {
         await using var cmd = new SqlCommand(sql, con);
         cmd.Parameters.AddWithValue("@healthCampReferenceTypeId", HealthCampReferenceTypeId);
+        cmd.Parameters.AddWithValue("@referenceName", (object?)referenceName ?? DBNull.Value);
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
 
         var list = new List<AnalyticsPointDto>();

@@ -3,8 +3,10 @@ import 'package:optima_healthcare_mobile/features/admin/data/admin_master_reposi
 import 'package:optima_healthcare_mobile/features/admin/models/clinic_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/clinic_schedule_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/doctor_profile_model.dart';
+import 'package:optima_healthcare_mobile/features/admin/models/health_camp_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/invoice_type_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/staff_model.dart';
+import 'package:optima_healthcare_mobile/features/appointments/models/lookup_option_model.dart';
 import 'package:optima_healthcare_mobile/features/auth/models/auth_session.dart';
 
 class ClinicMasterPage extends StatelessWidget {
@@ -47,6 +49,14 @@ class InvoiceTypeMasterPage extends StatelessWidget {
       const AdminMastersPage(initialTab: 4, showTabs: false);
 }
 
+class HealthCampMasterPage extends StatelessWidget {
+  const HealthCampMasterPage({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      const AdminMastersPage(initialTab: 5, showTabs: false);
+}
+
 class AdminMastersPage extends StatefulWidget {
   const AdminMastersPage({
     super.key,
@@ -73,14 +83,16 @@ class _AdminMastersPageState extends State<AdminMastersPage>
   List<StaffModel> _staff = const [];
   List<ClinicScheduleModel> _clinicSchedules = const [];
   List<InvoiceTypeModel> _invoiceTypes = const [];
+  List<HealthCampModel> _healthCamps = const [];
+  List<LookupOptionModel> _referenceTypes = const [];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 5,
+      length: 6,
       vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 4),
+      initialIndex: widget.initialTab.clamp(0, 5),
     );
     _tabController.addListener(() {
       if (mounted) {
@@ -117,12 +129,16 @@ class _AdminMastersPageState extends State<AdminMastersPage>
       final staff = await _repo.listStaff(token);
       final schedules = await _repo.listClinicSchedules(token);
       final invoiceTypes = await _repo.listInvoiceTypes(token);
+      final healthCamps = await _repo.listHealthCamps(token);
+      final referenceTypes = await _repo.listReferenceTypes(token);
       setState(() {
         _clinics = clinics;
         _doctors = doctors;
         _staff = staff;
         _clinicSchedules = schedules;
         _invoiceTypes = invoiceTypes;
+        _healthCamps = healthCamps;
+        _referenceTypes = referenceTypes;
       });
     } catch (ex) {
       setState(() {
@@ -154,8 +170,10 @@ class _AdminMastersPageState extends State<AdminMastersPage>
         return 'Staff';
       case 3:
         return 'Clinic Schedule';
-      default:
+      case 4:
         return 'Invoice Type';
+      default:
+        return 'Health Camp';
     }
   }
 
@@ -177,6 +195,7 @@ class _AdminMastersPageState extends State<AdminMastersPage>
                   Tab(text: 'Staff'),
                   Tab(text: 'Clinic Schedule'),
                   Tab(text: 'Invoice Type'),
+                  Tab(text: 'Health Camp'),
                 ],
               )
             : null,
@@ -212,6 +231,7 @@ class _AdminMastersPageState extends State<AdminMastersPage>
                   _staffList(),
                   _clinicScheduleList(),
                   _invoiceTypeList(),
+                  _healthCampList(),
                 ],
               )
             : _singleList(),
@@ -229,8 +249,10 @@ class _AdminMastersPageState extends State<AdminMastersPage>
         return _staffList();
       case 3:
         return _clinicScheduleList();
-      default:
+      case 4:
         return _invoiceTypeList();
+      default:
+        return _healthCampList();
     }
   }
 
@@ -243,8 +265,10 @@ class _AdminMastersPageState extends State<AdminMastersPage>
       _showStaffDialog();
     } else if (_tabController.index == 3) {
       _showClinicScheduleDialog();
-    } else {
+    } else if (_tabController.index == 4) {
       _showInvoiceTypeDialog();
+    } else {
+      _showHealthCampDialog();
     }
   }
 
@@ -351,10 +375,30 @@ class _AdminMastersPageState extends State<AdminMastersPage>
               'Charges: ${item.charges.toStringAsFixed(2)}${item.description.isEmpty ? '' : ' | ${item.description}'}',
           isActive: item.isActive,
           onEdit: () => _showInvoiceTypeDialog(existing: item),
-          onDelete: () => _confirmDelete(
-            'invoice type',
-            () => _deleteInvoiceType(item.id),
-          ),
+          onDelete: () =>
+              _confirmDelete('invoice type', () => _deleteInvoiceType(item.id)),
+        );
+      },
+    );
+  }
+
+  Widget _healthCampList() {
+    if (_healthCamps.isEmpty) return _emptyCard('No health camps found.');
+    return ListView.builder(
+      itemCount: _healthCamps.length,
+      padding: const EdgeInsets.all(12),
+      itemBuilder: (context, index) {
+        final camp = _healthCamps[index];
+        final referenceType = _referenceTypeName(camp.referenceTypeId);
+        return _masterCard(
+          icon: Icons.diversity_1_outlined,
+          title: camp.campName,
+          subtitle:
+              '${_formatDate(camp.campDate)} | ${camp.location} | ${camp.organizer} | $referenceType',
+          isActive: camp.isActive,
+          onEdit: () => _showHealthCampDialog(existing: camp),
+          onDelete: () =>
+              _confirmDelete('health camp', () => _deleteHealthCamp(camp.id)),
         );
       },
     );
@@ -511,7 +555,9 @@ class _AdminMastersPageState extends State<AdminMastersPage>
     final name = TextEditingController(text: existing?.name ?? '');
     if (_clinics.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please create at least one clinic first.')),
+        const SnackBar(
+          content: Text('Please create at least one clinic first.'),
+        ),
       );
       return;
     }
@@ -532,10 +578,9 @@ class _AdminMastersPageState extends State<AdminMastersPage>
             prefixIcon: const Icon(Icons.local_hospital_outlined),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             filled: true,
-            fillColor: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest
-                .withValues(alpha: 0.35),
+            fillColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
           ),
           items: _clinics
               .map(
@@ -763,29 +808,32 @@ class _AdminMastersPageState extends State<AdminMastersPage>
                       const SizedBox(width: 8),
                       FilledButton(
                         onPressed: () async {
-                          final ok = await _runAction(() async {
-                            final token = AuthSession.accessToken;
-                            if (token == null) return;
+                          final ok = await _runAction(
+                            () async {
+                              final token = AuthSession.accessToken;
+                              if (token == null) return;
 
-                            final cleanOpen = openTime.text.trim();
-                            final cleanClose = closeTime.text.trim();
+                              final cleanOpen = openTime.text.trim();
+                              final cleanClose = closeTime.text.trim();
 
-                            await _repo.saveClinicSchedule(token, {
-                              'clinicId': selectedClinicId,
-                              'dayOfWeek': selectedDay,
-                              'openTime': isClosed
-                                  ? null
-                                  : (cleanOpen.isEmpty ? null : cleanOpen),
-                              'closeTime': isClosed
-                                  ? null
-                                  : (cleanClose.isEmpty ? null : cleanClose),
-                              'isClosed': isClosed,
-                              'appUserId': AuthSession.appUserId ?? 0,
-                            }, id: existing?.id);
-                            await _load();
-                          }, successMessage: existing == null
-                              ? 'Clinic schedule saved successfully.'
-                              : 'Clinic schedule updated successfully.');
+                              await _repo.saveClinicSchedule(token, {
+                                'clinicId': selectedClinicId,
+                                'dayOfWeek': selectedDay,
+                                'openTime': isClosed
+                                    ? null
+                                    : (cleanOpen.isEmpty ? null : cleanOpen),
+                                'closeTime': isClosed
+                                    ? null
+                                    : (cleanClose.isEmpty ? null : cleanClose),
+                                'isClosed': isClosed,
+                                'appUserId': AuthSession.appUserId ?? 0,
+                              }, id: existing?.id);
+                              await _load();
+                            },
+                            successMessage: existing == null
+                                ? 'Clinic schedule saved successfully.'
+                                : 'Clinic schedule updated successfully.',
+                          );
                           if (ok && ctx.mounted) {
                             Navigator.pop(ctx);
                           }
@@ -805,7 +853,9 @@ class _AdminMastersPageState extends State<AdminMastersPage>
 
   Future<void> _showInvoiceTypeDialog({InvoiceTypeModel? existing}) async {
     final name = TextEditingController(text: existing?.name ?? '');
-    final description = TextEditingController(text: existing?.description ?? '');
+    final description = TextEditingController(
+      text: existing?.description ?? '',
+    );
     final charges = TextEditingController(
       text: existing == null ? '' : existing.charges.toStringAsFixed(2),
     );
@@ -845,6 +895,125 @@ class _AdminMastersPageState extends State<AdminMastersPage>
       successMessage: existing == null
           ? 'Invoice type saved successfully.'
           : 'Invoice type updated successfully.',
+    );
+  }
+
+  Future<void> _showHealthCampDialog({HealthCampModel? existing}) async {
+    if (_referenceTypes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please create at least one reference type first.'),
+        ),
+      );
+      return;
+    }
+
+    final name = TextEditingController(text: existing?.campName ?? '');
+    var selectedDate = existing?.campDate ?? DateTime.now();
+    final date = TextEditingController(text: _formatDate(selectedDate));
+    final location = TextEditingController(text: existing?.location ?? '');
+    final organizer = TextEditingController(text: existing?.organizer ?? '');
+    final description = TextEditingController(
+      text: existing?.description ?? '',
+    );
+    var selectedReferenceTypeId =
+        existing?.referenceTypeId ?? _referenceTypes.first.id;
+    var isActive = existing?.isActive ?? true;
+
+    await _showStyledDialog(
+      title: existing == null ? 'Add Health Camp' : 'Update Health Camp',
+      children: [
+        _styledField(name, 'Camp Name', Icons.diversity_1_outlined),
+        StatefulBuilder(
+          builder: (context, setStateDialog) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: TextField(
+              controller: date,
+              readOnly: true,
+              decoration: InputDecoration(
+                labelText: 'Camp Date',
+                prefixIcon: const Icon(Icons.event_outlined),
+                suffixIcon: const Icon(Icons.calendar_month_outlined),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+              ),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: selectedDate,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2100),
+                );
+                if (picked != null) {
+                  setStateDialog(() {
+                    selectedDate = picked;
+                    date.text = _formatDate(picked);
+                  });
+                }
+              },
+            ),
+          ),
+        ),
+        _styledField(location, 'Location', Icons.place_outlined),
+        _styledField(organizer, 'Organizer', Icons.groups_outlined),
+        DropdownButtonFormField<int>(
+          initialValue: selectedReferenceTypeId,
+          decoration: InputDecoration(
+            labelText: 'Reference Type',
+            prefixIcon: const Icon(Icons.category_outlined),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            filled: true,
+            fillColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+          ),
+          items: _referenceTypes
+              .map(
+                (type) => DropdownMenuItem<int>(
+                  value: type.id,
+                  child: Text(type.name),
+                ),
+              )
+              .toList(),
+          onChanged: (value) {
+            if (value != null) {
+              selectedReferenceTypeId = value;
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+        _styledField(description, 'Description', Icons.notes),
+        StatefulBuilder(
+          builder: (context, setStateDialog) => SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Active'),
+            value: isActive,
+            onChanged: (value) => setStateDialog(() => isActive = value),
+          ),
+        ),
+      ],
+      onSave: () async {
+        final token = AuthSession.accessToken;
+        if (token == null) return;
+        await _repo.saveHealthCamp(token, {
+          'campName': name.text.trim(),
+          'campDate': _dateOnlyIso(selectedDate),
+          'location': location.text.trim(),
+          'organizer': organizer.text.trim(),
+          'description': description.text.trim(),
+          'referenceTypeId': selectedReferenceTypeId,
+          'isActive': isActive,
+        }, id: existing?.id);
+        await _load();
+      },
+      successMessage: existing == null
+          ? 'Health camp saved successfully.'
+          : 'Health camp updated successfully.',
     );
   }
 
@@ -975,6 +1144,28 @@ class _AdminMastersPageState extends State<AdminMastersPage>
     return 'Clinic #';
   }
 
+  String _referenceTypeName(int referenceTypeId) {
+    for (final type in _referenceTypes) {
+      if (type.id == referenceTypeId) {
+        return type.name;
+      }
+    }
+    return 'Reference Type #$referenceTypeId';
+  }
+
+  String _formatDate(DateTime date) {
+    final local = date.toLocal();
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    return '${local.year}-$month-$day';
+  }
+
+  String _dateOnlyIso(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
+  }
+
   String _dayLabel(int dayOfWeek) {
     switch (dayOfWeek) {
       case 1:
@@ -1042,6 +1233,13 @@ class _AdminMastersPageState extends State<AdminMastersPage>
     final token = AuthSession.accessToken;
     if (token == null) return;
     await _repo.deleteInvoiceType(token, id);
+    await _load();
+  }
+
+  Future<void> _deleteHealthCamp(int id) async {
+    final token = AuthSession.accessToken;
+    if (token == null) return;
+    await _repo.deleteHealthCamp(token, id);
     await _load();
   }
 }

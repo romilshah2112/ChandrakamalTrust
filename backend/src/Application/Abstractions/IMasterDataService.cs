@@ -30,4 +30,9 @@ public interface IMasterDataService
     Task<int> CreateInvoiceTypeAsync(SaveInvoiceTypeRequest request, CancellationToken cancellationToken);
     Task UpdateInvoiceTypeAsync(int invoiceTypeId, SaveInvoiceTypeRequest request, CancellationToken cancellationToken);
     Task DeleteInvoiceTypeAsync(int invoiceTypeId, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<HealthCampDto>> ListHealthCampsAsync(CancellationToken cancellationToken);
+    Task<int> CreateHealthCampAsync(SaveHealthCampRequest request, CancellationToken cancellationToken);
+    Task UpdateHealthCampAsync(int healthCampId, SaveHealthCampRequest request, CancellationToken cancellationToken);
+    Task DeleteHealthCampAsync(int healthCampId, CancellationToken cancellationToken);
 }

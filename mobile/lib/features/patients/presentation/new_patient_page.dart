@@ -17,8 +17,6 @@ class NewPatientPage extends StatefulWidget {
 
 class _NewPatientPageState extends State<NewPatientPage> {
   static const int _maxImageBytes = 100 * 1024;
-  static const int _defaultReferenceTypeId = 6;
-  static const String _defaultReferenceName = 'HealthCamp';
 
   final _formKey = GlobalKey<FormState>();
   final _repo = PatientRepository();
@@ -202,8 +200,8 @@ class _NewPatientPageState extends State<NewPatientPage> {
               : base64Encode(_profileImageBytes!),
           imageFileName: _profileImageFileName,
           imageContentType: _profileImageContentType,
-          referenceTypeId: _defaultReferenceTypeId,
-          referenceName: _defaultReferenceName,
+          referenceTypeId: 0,
+          referenceName: '',
         ),
       );
 

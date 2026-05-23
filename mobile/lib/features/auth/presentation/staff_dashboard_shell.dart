@@ -47,9 +47,10 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
     final role = AuthSession.role ?? '';
     final firstName = AuthSession.firstName?.trim() ?? '';
     final lastName = AuthSession.lastName?.trim() ?? '';
-    final fullName = [firstName, lastName]
-        .where((part) => part.isNotEmpty)
-        .join(' ');
+    final fullName = [
+      firstName,
+      lastName,
+    ].where((part) => part.isNotEmpty).join(' ');
     final displayName = fullName.isNotEmpty
         ? fullName
         : (AuthSession.username ?? '');
@@ -64,13 +65,15 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
             IconButton(
               icon: const Icon(Icons.insights_outlined),
               tooltip: 'Analytics',
-              onPressed: () => Navigator.of(context).pushNamed(AppRouter.doctorAnalytics),
+              onPressed: () =>
+                  Navigator.of(context).pushNamed(AppRouter.doctorAnalytics),
             ),
           if (_showStaffAnalytics(role))
             IconButton(
               icon: const Icon(Icons.bar_chart_outlined),
               tooltip: 'Patient Analytics',
-              onPressed: () => Navigator.of(context).pushNamed(AppRouter.staffAnalytics),
+              onPressed: () =>
+                  Navigator.of(context).pushNamed(AppRouter.staffAnalytics),
             ),
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
@@ -243,6 +246,14 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
                   Navigator.of(context).pushNamed(AppRouter.invoiceTypeMaster);
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.diversity_1_outlined),
+                title: const Text('Health Camp'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).pushNamed(AppRouter.healthCampMaster);
+                },
+              ),
             ],
           ],
         ),
@@ -255,9 +266,7 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
             welcomeSubtitle:
                 'Use quick actions or the menu to manage patients and appointments.',
             supplementarySections: role.toLowerCase().contains('doctor')
-                ? const [
-                    DoctorHomeOverview(),
-                  ]
+                ? const [DoctorHomeOverview()]
                 : const [],
             quickActions: [
               QuickActionItem(
@@ -292,7 +301,8 @@ class _StaffDashboardShellState extends State<StaffDashboardShell> {
                 icon: Icons.receipt_long,
                 label: 'Invoices',
                 color: primary,
-                onTap: () => Navigator.of(context).pushNamed(AppRouter.invoices),
+                onTap: () =>
+                    Navigator.of(context).pushNamed(AppRouter.invoices),
               ),
               QuickActionItem(
                 icon: Icons.emergency,

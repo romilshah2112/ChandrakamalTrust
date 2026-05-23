@@ -285,6 +285,59 @@ public sealed class AdminMastersController : ControllerBase
         }
     }
 
+    [HttpGet("health-camps")]
+    public async Task<ActionResult<IReadOnlyList<HealthCampDto>>> ListHealthCamps(CancellationToken cancellationToken)
+    {
+        if (!IsAdminUser())
+        {
+            return Forbid();
+        }
+
+        return Ok(await _masterDataService.ListHealthCampsAsync(cancellationToken));
+    }
+
+    [HttpPost("health-camps")]
+    public async Task<ActionResult> CreateHealthCamp([FromBody] SaveHealthCampRequest request, CancellationToken cancellationToken)
+    {
+        if (!IsAdminUser())
+        {
+            return Forbid();
+        }
+
+        return StatusCode(StatusCodes.Status201Created, new { id = await _masterDataService.CreateHealthCampAsync(request, cancellationToken) });
+    }
+
+    [HttpPut("health-camps/{id:int}")]
+    public async Task<ActionResult> UpdateHealthCamp(int id, [FromBody] SaveHealthCampRequest request, CancellationToken cancellationToken)
+    {
+        if (!IsAdminUser())
+        {
+            return Forbid();
+        }
+
+        await _masterDataService.UpdateHealthCampAsync(id, request, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpDelete("health-camps/{id:int}")]
+    public async Task<ActionResult> DeleteHealthCamp(int id, CancellationToken cancellationToken)
+    {
+        if (!IsAdminUser())
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            await _masterDataService.DeleteHealthCampAsync(id, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(ex.Message);
+        }
+    }
+
     private bool IsAdminUser()
         => User.GetRoleName().Contains("admin", StringComparison.OrdinalIgnoreCase);
 }

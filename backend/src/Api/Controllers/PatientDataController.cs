@@ -34,7 +34,6 @@ public sealed class PatientDataController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.FirstName)
             || string.IsNullOrWhiteSpace(request.LastName)
             || string.IsNullOrWhiteSpace(request.Email)
-            || request.ReferenceTypeId <= 0
             || request.MobileNo <= 0)
         {
             return BadRequest("Invalid patient payload.");

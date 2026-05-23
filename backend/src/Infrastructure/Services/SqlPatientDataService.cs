@@ -30,8 +30,12 @@ public sealed class SqlPatientDataService : IPatientDataService
         await connection.OpenAsync(cancellationToken);
 
         var imageName = await ResolveImageNameAsync(request, cancellationToken);
-        var referenceTypeId = DefaultCreateReferenceTypeId;
-        var referenceName = DefaultCreateReferenceName;
+        var createdDate = DateTime.UtcNow.Date;
+        var (referenceTypeId, referenceName) = await ResolveCreateReferenceAsync(
+            connection,
+            createdDate,
+            request,
+            cancellationToken);
 
         const string sql = @"
 INSERT INTO [patientdata]
@@ -51,7 +55,7 @@ VALUES
         command.Parameters.AddWithValue("@gender", request.Gender);
         command.Parameters.AddWithValue("@city", request.City);
         command.Parameters.AddWithValue("@birthDate", request.BirthDate.ToDateTime(TimeOnly.MinValue));
-        command.Parameters.AddWithValue("@createdDate", DateTime.UtcNow.Date);
+        command.Parameters.AddWithValue("@createdDate", createdDate);
         command.Parameters.AddWithValue("@imageName", (object?)imageName ?? DBNull.Value);
         command.Parameters.AddWithValue("@appUserId", request.AppUserId);
         command.Parameters.AddWithValue("@referenceTypeId", referenceTypeId);
@@ -60,6 +64,45 @@ VALUES
 
         var insertedId = await command.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt32(insertedId);
+    }
+
+    private static async Task<(int ReferenceTypeId, string ReferenceName)> ResolveCreateReferenceAsync(
+        SqlConnection connection,
+        DateTime createdDate,
+        PatientDataCreateRequest request,
+        CancellationToken cancellationToken)
+    {
+        const string healthCampSql = @"
+SELECT TOP 1 [lReferenceTypeId], [CampName]
+FROM [HealthCamp]
+WHERE CAST([CampDate] AS date) = @createdDate
+  AND ISNULL([IsActive], 1) = 1
+ORDER BY [lHealthCampId] DESC";
+
+        await using (var command = new SqlCommand(healthCampSql, connection))
+        {
+            command.Parameters.AddWithValue("@createdDate", createdDate);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (await reader.ReadAsync(cancellationToken))
+            {
+                var referenceTypeId = reader["lReferenceTypeId"] is DBNull
+                    ? DefaultCreateReferenceTypeId
+                    : Convert.ToInt32(reader["lReferenceTypeId"]);
+                var referenceName = reader["CampName"]?.ToString();
+
+                return (
+                    referenceTypeId <= 0 ? DefaultCreateReferenceTypeId : referenceTypeId,
+                    string.IsNullOrWhiteSpace(referenceName)
+                        ? DefaultCreateReferenceName
+                        : referenceName.Trim());
+            }
+        }
+
+        return (
+            request.ReferenceTypeId > 0 ? request.ReferenceTypeId : DefaultCreateReferenceTypeId,
+            string.IsNullOrWhiteSpace(request.ReferenceName)
+                ? DefaultCreateReferenceName
+                : request.ReferenceName.Trim());
     }
 
     public async Task<PatientDataResponse?> GetByAppUserIdAsync(int appUserId, CancellationToken cancellationToken)

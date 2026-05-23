@@ -532,6 +532,94 @@ VALUES({string.Join(",", insertValues)})";
         }
     }
 
+    public async Task<IReadOnlyList<HealthCampDto>> ListHealthCampsAsync(CancellationToken cancellationToken)
+    {
+        const string sql = @"
+SELECT [lHealthCampId], [CampName], [CampDate], [Location], [Organizer], [Description], [lReferenceTypeId], [IsActive], [CreatedOn]
+FROM [HealthCamp]
+ORDER BY [CampDate] DESC, [lHealthCampId] DESC";
+
+        await using var con = new SqlConnection(_connectionString);
+        await con.OpenAsync(cancellationToken);
+        await using var cmd = new SqlCommand(sql, con);
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+
+        var list = new List<HealthCampDto>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            list.Add(new HealthCampDto
+            {
+                HealthCampId = SafeInt(reader["lHealthCampId"]),
+                CampName = reader["CampName"]?.ToString() ?? string.Empty,
+                CampDate = SafeDateTime(reader["CampDate"]),
+                Location = reader["Location"]?.ToString() ?? string.Empty,
+                Organizer = reader["Organizer"]?.ToString() ?? string.Empty,
+                Description = reader["Description"]?.ToString() ?? string.Empty,
+                ReferenceTypeId = SafeInt(reader["lReferenceTypeId"]),
+                IsActive = SafeBool(reader["IsActive"]),
+                CreatedOn = SafeDateTime(reader["CreatedOn"])
+            });
+        }
+
+        return list;
+    }
+
+    public async Task<int> CreateHealthCampAsync(SaveHealthCampRequest request, CancellationToken cancellationToken)
+    {
+        const string sql = @"
+INSERT INTO [HealthCamp]([CampName], [CampDate], [Location], [Organizer], [Description], [lReferenceTypeId], [IsActive], [CreatedOn])
+OUTPUT INSERTED.[lHealthCampId]
+VALUES(@campName, @campDate, @location, @organizer, @description, @referenceTypeId, @isActive, @createdOn)";
+
+        await using var con = new SqlConnection(_connectionString);
+        await con.OpenAsync(cancellationToken);
+        await using var cmd = new SqlCommand(sql, con);
+        BindHealthCamp(cmd, request);
+        cmd.Parameters.AddWithValue("@createdOn", DateTime.UtcNow);
+        var id = await cmd.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(id);
+    }
+
+    public async Task UpdateHealthCampAsync(int healthCampId, SaveHealthCampRequest request, CancellationToken cancellationToken)
+    {
+        const string sql = @"
+UPDATE [HealthCamp]
+SET [CampName] = @campName,
+    [CampDate] = @campDate,
+    [Location] = @location,
+    [Organizer] = @organizer,
+    [Description] = @description,
+    [lReferenceTypeId] = @referenceTypeId,
+    [IsActive] = @isActive
+WHERE [lHealthCampId] = @id";
+
+        await using var con = new SqlConnection(_connectionString);
+        await con.OpenAsync(cancellationToken);
+        await using var cmd = new SqlCommand(sql, con);
+        BindHealthCamp(cmd, request);
+        cmd.Parameters.AddWithValue("@id", healthCampId);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task DeleteHealthCampAsync(int healthCampId, CancellationToken cancellationToken)
+    {
+        const string sql = @"UPDATE [HealthCamp] SET [IsActive] = 0 WHERE [lHealthCampId] = @id";
+
+        await using var con = new SqlConnection(_connectionString);
+        await con.OpenAsync(cancellationToken);
+        await using var cmd = new SqlCommand(sql, con);
+        cmd.Parameters.AddWithValue("@id", healthCampId);
+
+        try
+        {
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (SqlException ex) when (ex.Number == 547)
+        {
+            throw new InvalidOperationException("Cannot delete health camp because linked records exist.", ex);
+        }
+    }
+
     private static void BindClinic(SqlCommand cmd, SaveClinicRequest request)
     {
         cmd.Parameters.AddWithValue("@name", request.ClinicName);
@@ -620,6 +708,17 @@ VALUES({string.Join(",", insertValues)})";
         }
     }
 
+    private static void BindHealthCamp(SqlCommand cmd, SaveHealthCampRequest request)
+    {
+        cmd.Parameters.AddWithValue("@campName", request.CampName);
+        cmd.Parameters.AddWithValue("@campDate", request.CampDate.Date);
+        cmd.Parameters.AddWithValue("@location", request.Location);
+        cmd.Parameters.AddWithValue("@organizer", request.Organizer);
+        cmd.Parameters.AddWithValue("@description", (object?)request.Description ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@referenceTypeId", request.ReferenceTypeId);
+        cmd.Parameters.AddWithValue("@isActive", request.IsActive);
+    }
+
     private static string? ResolveFirst(HashSet<string> columns, IReadOnlyList<string> candidates)
         => candidates.FirstOrDefault(columns.Contains);
 
@@ -649,6 +748,7 @@ WHERE TABLE_NAME = @tableName";
     private static int SafeInt(object value) => value is DBNull ? 0 : Convert.ToInt32(value);
     private static double SafeDouble(object value) => value is DBNull ? 0d : Convert.ToDouble(value);
     private static long SafeLong(object value) => value is DBNull ? 0L : Convert.ToInt64(value);
+    private static DateTime SafeDateTime(object value) => value is DBNull ? DateTime.MinValue : Convert.ToDateTime(value);
     private static string? SafeTimeString(object value)
     {
         if (value is DBNull)

@@ -42,6 +42,7 @@ class AppRouter {
   static const String staffMaster = '/master-staff';
   static const String clinicScheduleMaster = '/master-clinic-schedule';
   static const String invoiceTypeMaster = '/master-invoice-type';
+  static const String healthCampMaster = '/master-health-camp';
   static const String invoices = '/invoices';
   static const String consultation = '/consultation';
   static const String doctorAnalytics = '/doctor-analytics';
@@ -69,6 +70,7 @@ class AppRouter {
     staffMaster: (_) => const StaffMasterPage(),
     clinicScheduleMaster: (_) => const ClinicScheduleMasterPage(),
     invoiceTypeMaster: (_) => const InvoiceTypeMasterPage(),
+    healthCampMaster: (_) => const HealthCampMasterPage(),
     invoices: (_) => const InvoicesPage(),
     consultation: (_) => const ConsultationPage(),
     doctorAnalytics: (_) => const DoctorAnalyticsPage(),

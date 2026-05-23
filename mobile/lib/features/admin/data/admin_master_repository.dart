@@ -2,8 +2,10 @@ import 'package:optima_healthcare_mobile/core/network/api_client.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/clinic_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/clinic_schedule_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/doctor_profile_model.dart';
+import 'package:optima_healthcare_mobile/features/admin/models/health_camp_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/invoice_type_model.dart';
 import 'package:optima_healthcare_mobile/features/admin/models/staff_model.dart';
+import 'package:optima_healthcare_mobile/features/appointments/models/lookup_option_model.dart';
 
 class AdminMasterRepository {
   AdminMasterRepository({ApiClient? apiClient})
@@ -54,4 +56,17 @@ class AdminMasterRepository {
   }) => _apiClient.saveInvoiceType(accessToken: token, body: body, id: id);
   Future<void> deleteInvoiceType(String token, int id) =>
       _apiClient.deleteInvoiceType(accessToken: token, id: id);
+
+  Future<List<HealthCampModel>> listHealthCamps(String token) =>
+      _apiClient.listHealthCamps(accessToken: token);
+  Future<void> saveHealthCamp(
+    String token,
+    Map<String, dynamic> body, {
+    int? id,
+  }) => _apiClient.saveHealthCamp(accessToken: token, body: body, id: id);
+  Future<void> deleteHealthCamp(String token, int id) =>
+      _apiClient.deleteHealthCamp(accessToken: token, id: id);
+
+  Future<List<LookupOptionModel>> listReferenceTypes(String token) =>
+      _apiClient.getReferenceTypes(accessToken: token);
 }

@@ -3,11 +3,18 @@ import 'package:optima_healthcare_mobile/features/staff_analytics/models/staff_d
 
 class StaffAnalyticsRepository {
   StaffAnalyticsRepository({ApiClient? apiClient})
-      : _apiClient = apiClient ?? ApiClient();
+    : _apiClient = apiClient ?? ApiClient();
 
   final ApiClient _apiClient;
 
   Future<StaffDashboardAnalyticsModel> getDashboardAnalytics({
     required String accessToken,
-  }) => _apiClient.getStaffDashboardAnalytics(accessToken: accessToken);
+    String? referenceName,
+  }) => _apiClient.getStaffDashboardAnalytics(
+    accessToken: accessToken,
+    referenceName: referenceName,
+  );
+
+  Future<List<String>> getReferenceNames({required String accessToken}) =>
+      _apiClient.getStaffAnalyticsReferenceNames(accessToken: accessToken);
 }
